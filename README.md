@@ -20,12 +20,11 @@ APP_SESSION_SECRET=replace-with-a-long-random-string
 On Vercel, also set:
 
 ```bash
-BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 APP_SECURE_COOKIES=true
 APP_URL=https://amargi-files.vercel.app
 ```
 
-Vercel Blob is used only for JSON metadata persistence. The media files themselves live in R2.
+JSON metadata is persisted in the private R2 bucket when R2 is configured. Vercel Blob support remains as an optional fallback, but it is not required for the current R2-backed setup.
 
 ## Email Notifications
 
@@ -57,8 +56,30 @@ The current implementation stores metadata in `media-db.json` using the same per
 - Proxy status
 - Comments
 - Share links
+- Activity log
 
-For higher-volume production, migrate `media-db.json`, `users.json`, `file-workflows.json`, and `comment-meta.json` to Postgres, D1, Neon, Supabase, or another transactional database. The server code keeps metadata access centralized so this can be replaced later.
+For higher-volume production, migrate `media-db.json`, `users.json`, `file-workflows.json`, `comment-meta.json`, and `activity-log.json` to Postgres, D1, Neon, Supabase, or another transactional database. The server code keeps metadata access centralized so this can be replaced later.
+
+## Activity Retention
+
+The app records important user activity in `activity-log.json` and automatically keeps only the most recent 60 days. Activity includes:
+
+- Logins and logouts
+- Admin settings changes
+- User creation and password updates
+- Folder creation, rename, and delete
+- Upload start, completion, and abort
+- Thumbnail updates
+- File rename and delete
+- Comment creation, edit, reply, resolve, and reopen
+- Assignment and workflow status changes
+- Share link creation and unlocks
+
+Admins can read recent activity with:
+
+```bash
+GET /api/admin/activity?limit=100
+```
 
 ## Upload Flow
 

@@ -44,11 +44,13 @@ const SETTINGS_PATH = path.join(DATA_DIR, "app-settings.json");
 const WORKFLOWS_PATH = path.join(DATA_DIR, "file-workflows.json");
 const COMMENT_META_PATH = path.join(DATA_DIR, "comment-meta.json");
 const NOTIFICATIONS_PATH = path.join(DATA_DIR, "notifications.json");
+const ACTIVITY_LOG_PATH = path.join(DATA_DIR, "activity-log.json");
 const INTERNAL_ACCOUNT_ID = "mediaflow-account";
 const INTERNAL_WORKSPACE_ID = "mediaflow-workspace";
 const DEFAULT_PROJECT_ID = "project_uploads";
 const DEFAULT_ROOT_FOLDER_ID = "folder_root";
 const WORKFLOW_STATUSES = new Set(["work_in_progress", "rejected", "approved", "published"]);
+const ACTIVITY_RETENTION_DAYS = 60;
 
 let appSettings = {};
 let appSettingsLoaded = false;
@@ -222,6 +224,27 @@ async function writeAppSettings(settings) {
   appSettings = clean;
   r2ClientCache = null;
   await writeJson(SETTINGS_PATH, { settings: clean }, "app-settings.json");
+}
+
+function activityCutoffTime() {
+  return Date.now() - ACTIVITY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+}
+
+function pruneActivityEntries(entries) {
+  const cutoff = activityCutoffTime();
+  return entries.filter((entry) => {
+    const time = Date.parse(entry.createdAt);
+    return Number.isFinite(time) && time >= cutoff;
+  });
+}
+
+async function readActivityLog() {
+  const data = await readJson(ACTIVITY_LOG_PATH, { entries: [] }, "activity-log.json");
+  return pruneActivityEntries(Array.isArray(data.entries) ? data.entries : []);
+}
+
+async function writeActivityLog(entries) {
+  await writeJson(ACTIVITY_LOG_PATH, { entries: pruneActivityEntries(entries) }, "activity-log.json");
 }
 
 function getSetting(key) {
@@ -679,6 +702,46 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
 
+function actorFromRequest(request, fallback = {}) {
+  const user = request?.appUser || fallback || {};
+  const email = normalizeEmail(user.email);
+  return {
+    id: user.id || "",
+    email,
+    name: user.name || email || "Unknown user",
+    role: user.role || "",
+  };
+}
+
+function requestActivityContext(request) {
+  return {
+    ip: request?.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || request?.ip || "",
+    userAgent: request?.headers?.["user-agent"] || "",
+  };
+}
+
+function compactDetails(details = {}) {
+  return Object.fromEntries(
+    Object.entries(details).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+  );
+}
+
+async function recordActivity(request, action, target = {}, details = {}) {
+  const entries = await readActivityLog();
+  const entry = {
+    id: crypto.randomUUID(),
+    action,
+    actor: actorFromRequest(request),
+    target: compactDetails(target),
+    details: compactDetails(details),
+    context: requestActivityContext(request),
+    createdAt: new Date().toISOString(),
+  };
+  entries.unshift(entry);
+  await writeActivityLog(entries);
+  return entry;
+}
+
 async function recordNotification(notification) {
   const data = await readJson(NOTIFICATIONS_PATH, [], "notifications.json");
   const item = { id: crypto.randomUUID(), ...notification, createdAt: new Date().toISOString() };
@@ -730,6 +793,8 @@ app.post("/auth/app/login", async (request, response, next) => {
       response.status(401).json({ error: "Invalid email or password." });
       return;
     }
+    request.appUser = publicUser(user);
+    await recordActivity(request, "auth.login", { type: "user", id: user.id, email: user.email, name: user.name });
     response.setHeader("Set-Cookie", `mediaflow_session=${signSession(user)}; ${cookieOptions()}`);
     response.json({ ok: true, user: publicUser(user) });
   } catch (error) {
@@ -737,9 +802,25 @@ app.post("/auth/app/login", async (request, response, next) => {
   }
 });
 
-app.post("/auth/app/logout", (_request, response) => {
+app.post("/auth/app/logout", requireAppSession, async (request, response, next) => {
+  try {
+    await recordActivity(request, "auth.logout", { type: "user", id: request.appUser.id, email: request.appUser.email, name: request.appUser.name });
+  } catch (error) {
+    next(error);
+    return;
+  }
   response.setHeader("Set-Cookie", "mediaflow_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
   response.json({ ok: true });
+});
+
+app.get("/api/admin/activity", requireAdminSession, async (request, response, next) => {
+  try {
+    const limit = Math.min(500, Math.max(1, Number(request.query.limit) || 100));
+    const entries = await readActivityLog();
+    response.json({ data: entries.slice(0, limit), retentionDays: ACTIVITY_RETENTION_DAYS });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/admin/settings", requireAdminSession, async (_request, response, next) => {
@@ -784,6 +865,15 @@ app.patch("/api/admin/settings", requireAdminSession, async (request, response, 
     assignIfPresent("NOTIFICATION_RECIPIENTS", request.body?.notificationRecipients);
     nextSettings.SMTP_SECURE = String(Boolean(request.body?.smtpSecure));
     await writeAppSettings(nextSettings);
+    await recordActivity(request, "admin.settings_updated", { type: "settings", id: "admin-settings" }, {
+      smtpHost: Boolean(request.body?.smtpHost),
+      smtpPort: Boolean(request.body?.smtpPort),
+      smtpUser: Boolean(request.body?.smtpUser),
+      smtpPass: Boolean(request.body?.smtpPass),
+      smtpFrom: Boolean(request.body?.smtpFrom),
+      notificationRecipients: Boolean(request.body?.notificationRecipients),
+      smtpSecure: Boolean(request.body?.smtpSecure),
+    });
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -824,6 +914,7 @@ app.post("/api/admin/users", requireAdminSession, async (request, response, next
     };
     users.push(user);
     await writeUsers(users);
+    await recordActivity(request, "admin.user_created", { type: "user", id: user.id, email: user.email, name: user.name }, { role: user.role });
     response.status(201).json({ data: publicUser(user), users: users.map(publicUser) });
   } catch (error) {
     next(error);
@@ -876,8 +967,13 @@ app.get("/api/config", (_request, response) => {
   });
 });
 
-app.post("/auth/logout", requireAppSession, async (_request, response) => {
-  response.json({ ok: true });
+app.post("/auth/logout", requireAppSession, async (request, response, next) => {
+  try {
+    await recordActivity(request, "auth.logout", { type: "user", id: request.appUser.id, email: request.appUser.email, name: request.appUser.name });
+    response.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.patch("/auth/app/password", requireAppSession, async (request, response, next) => {
@@ -898,6 +994,7 @@ app.patch("/auth/app/password", requireAppSession, async (request, response, nex
     user.passwordHash = passwordParts.hash;
     user.passwordUpdatedAt = new Date().toISOString();
     await writeUsers(users);
+    await recordActivity(request, "account.password_updated", { type: "user", id: user.id, email: user.email, name: user.name });
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -965,6 +1062,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/folders", async (request, r
     const folder = { id: crypto.randomUUID(), projectId: parent.projectId, parentId: parent.id, name, createdAt: new Date().toISOString() };
     db.folders.push(folder);
     await writeMediaDb(db);
+    await recordActivity(request, "folder.created", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId });
     response.status(201).json({ data: toApiFolder(folder) });
   } catch (error) {
     next(error);
@@ -981,9 +1079,11 @@ app.patch("/api/accounts/:accountId/folders/:folderId", async (request, response
     const db = await readMediaDb();
     const folder = getFolder(db, request.params.folderId);
     assertProjectAccess(request.appUser, folder.projectId);
+    const previousName = folder.name;
     folder.name = name;
     folder.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
+    await recordActivity(request, "folder.renamed", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId }, { previousName, newName: folder.name });
     response.json({ data: toApiFolder(folder) });
   } catch (error) {
     next(error);
@@ -1012,12 +1112,15 @@ app.delete("/api/accounts/:accountId/folders/:folderId", async (request, respons
       }
     }
     const filesToDelete = db.files.filter((file) => descendantIds.has(file.folderId));
+    const deletedFolderCount = descendantIds.size;
+    const deletedFileCount = filesToDelete.length;
     for (const file of filesToDelete) {
       file.deletedAt = new Date().toISOString();
       await Promise.all(fileStorageKeys(file).map((key) => deleteObject(key)));
     }
     db.folders = db.folders.filter((item) => !descendantIds.has(item.id));
     await writeMediaDb(db);
+    await recordActivity(request, "folder.deleted", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId }, { deletedFolderCount, deletedFileCount });
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -1056,6 +1159,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/files/local-upload", async 
     };
     db.files.push(file);
     await writeMediaDb(db);
+    await recordActivity(request, "file.upload_started", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
     response.status(201).json({
       data: {
         ...toApiFile(file),
@@ -1110,6 +1214,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/files/multipart-upload", as
     };
     db.files.push(file);
     await writeMediaDb(db);
+    await recordActivity(request, "file.upload_started", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart", partCount: normalizedPartCount });
     response.status(201).json({ data: { ...toApiFile(file), uploadId, partUrls: urls } });
   } catch (error) {
     next(error);
@@ -1136,6 +1241,7 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     file.mimeType = request.body?.contentType || file.mimeType;
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
+    await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
     if (isVideo(file)) generateVideoProxy(file.id).catch(() => {});
     response.json({ data: toApiFile(file) });
   } catch (error) {
@@ -1152,6 +1258,7 @@ app.post("/api/files/:fileId/multipart/abort", async (request, response, next) =
     file.deletedAt = new Date().toISOString();
     file.status = "canceled";
     await writeMediaDb(db);
+    await recordActivity(request, "file.upload_aborted", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { uploadType: "multipart" });
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -1171,6 +1278,7 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     file.mimeType = request.body?.contentType || file.mimeType;
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
+    await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
     if (isVideo(file)) generateVideoProxy(file.id).catch(() => {});
     response.json({ data: toApiFile(file) });
   } catch (error) {
@@ -1189,6 +1297,7 @@ app.post("/api/files/:fileId/thumbnail-upload", async (request, response, next) 
     file.thumbnailKey = thumbnailKey;
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
+    await recordActivity(request, "file.thumbnail_updated", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId });
     response.json({ data: { uploadUrl: await signedPutUrl(thumbnailKey, mimeType), thumbnail: toApiFile(file).thumbnail } });
   } catch (error) {
     next(error);
@@ -1310,9 +1419,11 @@ app.patch("/api/accounts/:accountId/files/:fileId", async (request, response, ne
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
+    const previousName = file.name;
     file.name = name;
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
+    await recordActivity(request, "file.renamed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { previousName, newName: file.name });
     response.json({ data: toApiFile(file) });
   } catch (error) {
     next(error);
@@ -1327,6 +1438,7 @@ app.delete("/api/accounts/:accountId/files/:fileId", async (request, response, n
     file.deletedAt = new Date().toISOString();
     await Promise.all(fileStorageKeys(file).map((key) => deleteObject(key)));
     await writeMediaDb(db);
+    await recordActivity(request, "file.deleted", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType });
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -1363,6 +1475,7 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, a
     };
     db.comments[file.id] = [...(db.comments[file.id] || []), comment];
     await writeMediaDb(db);
+    await recordActivity(request, "comment.created", { type: "comment", id: comment.id, fileId: file.id, fileName: file.name, projectId: file.projectId }, { timestamp: comment.timestamp, textLength: comment.text.length });
     const users = await readUsers();
     const mentions = mentionedUsers(comment.text, users, request.appUser.email);
     await Promise.all(mentions.map((user) => recordNotification({
@@ -1431,22 +1544,28 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
       updatedBy: request.appUser.email,
     };
     await writeWorkflows(workflows);
+    const dbForActivity = await readMediaDb();
+    const workflowFile = getFileRecord(dbForActivity, request.params.fileId);
+    await recordActivity(request, "workflow.updated", { type: "file", id: workflowFile.id, name: workflowFile.name, projectId: workflowFile.projectId, folderId: workflowFile.folderId }, {
+      previousAssignee: previous.assigneeEmail,
+      assigneeEmail: normalizedAssignee,
+      previousStatus: previous.status,
+      status: normalizedStatus,
+    });
     if (assignee && normalizeEmail(previous.assigneeEmail) !== normalizedAssignee) {
-      const db = await readMediaDb();
-      const file = getFileRecord(db, request.params.fileId);
       await recordNotification({
         type: "assignment",
         to: assignee.email,
-        subject: `You were assigned to ${file.name}`,
+        subject: `You were assigned to ${workflowFile.name}`,
         text: [
           `${request.appUser.name || request.appUser.email} assigned you to a file.`,
           "",
-          `File: ${file.name}`,
+          `File: ${workflowFile.name}`,
           `Status: ${humanStatus(normalizedStatus)}`,
           "",
-          `Open review: ${reviewUrl(request, file.id)}`,
+          `Open review: ${reviewUrl(request, workflowFile.id)}`,
         ].join("\n"),
-        fileName: file.name,
+        fileName: workflowFile.name,
         status: normalizedStatus,
         actor: request.appUser.email,
       });
@@ -1499,6 +1618,15 @@ app.patch("/api/files/:fileId/comment-meta/:commentId", requireAppSession, async
     fileMeta[request.params.commentId] = nextMeta;
     files[request.params.fileId] = fileMeta;
     await writeCommentMeta(files);
+    const db = await readMediaDb();
+    const file = getFileRecord(db, request.params.fileId);
+    const actions = [];
+    if (editedText !== undefined) actions.push("comment.edited");
+    if (replyText !== undefined) actions.push("comment.replied");
+    if (resolved !== undefined) actions.push(nextMeta.resolved ? "comment.resolved" : "comment.reopened");
+    for (const action of actions) {
+      await recordActivity(request, action, { type: "comment", id: request.params.commentId, fileId: file.id, fileName: file.name, projectId: file.projectId }, { resolved: nextMeta.resolved });
+    }
     response.json({ data: nextMeta });
   } catch (error) {
     next(error);
@@ -1523,6 +1651,7 @@ app.post("/api/projects/:projectId/shares", requireAppSession, async (request, r
     };
     db.shares.push(share);
     await writeMediaDb(db);
+    await recordActivity(request, "share.created", { type: "share", id: share.id, name: share.name, projectId: share.projectId }, { assetCount: assetIds.length, passwordProtected: Boolean(password) });
     response.status(201).json({ data: { ...share, passwordHash: undefined, url: `/share/${share.token}` } });
   } catch (error) {
     next(error);
@@ -1560,6 +1689,7 @@ app.post("/share/:token/unlock", async (request, response, next) => {
       return;
     }
     if (!share.passwordHash || verifyHashRecord(request.body?.password, share.passwordHash)) {
+      await recordActivity(request, "share.unlocked", { type: "share", id: share.id, name: share.name, projectId: share.projectId }, { assetCount: share.assetIds?.length || 0 });
       response.setHeader("Set-Cookie", `mediaflow_share_${share.token}=1; HttpOnly; SameSite=Lax; Path=/share/${share.token}; Max-Age=604800`);
       response.redirect(`/share/${share.token}`);
       return;
