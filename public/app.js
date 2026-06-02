@@ -7,6 +7,11 @@ const elements = {
   authPassword: $("#authPassword"),
   authError: $("#authError"),
   authSubmitButton: $("#authSubmitButton"),
+  notificationsButton: $("#notificationsButton"),
+  notificationBadge: $("#notificationBadge"),
+  notificationsPanel: $("#notificationsPanel"),
+  closeNotificationsButton: $("#closeNotificationsButton"),
+  notificationsList: $("#notificationsList"),
   settingsButton: $("#settingsButton"),
   sidebar: $("#sidebar"),
   connectionBadge: $("#connectionBadge"),
@@ -91,6 +96,8 @@ const elements = {
   commentInput: $("#commentInput"),
   commentForm: $("#commentForm"),
   commentCount: $("#commentCount"),
+  mentionHint: $("#mentionHint"),
+  mentionSuggestions: $("#mentionSuggestions"),
 };
 
 const state = {
@@ -108,6 +115,8 @@ const state = {
   selectedAsset: null,
   comments: [],
   commentMeta: {},
+  notifications: [],
+  unreadNotifications: 0,
   view: localStorage.getItem("mediaflow_view") || "grid",
   commentFilter: "all",
   contextAssetId: "",
@@ -138,6 +147,23 @@ function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString([], { month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function relativeTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function initialsFor(value) {
+  return String(value || "Member").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "M";
 }
 
 function setAlert(message = "") {
@@ -259,11 +285,77 @@ async function saveApiSettings(event) {
 }
 
 async function loadUsers() {
-  if (state.user?.role !== "admin") return;
   const { data } = await api("/api/users");
   state.users = data;
-  elements.adminUsersList.innerHTML = data.map((user) => `<div class="adminUserRow"><strong>${escapeHtml(user.name || user.email)}</strong><span>${escapeHtml(user.email)} - ${escapeHtml(user.role)}</span></div>`).join("");
+  if (state.user?.role === "admin") {
+    elements.adminUsersList.innerHTML = data.map((user) => `<div class="adminUserRow"><strong>${escapeHtml(user.name || user.email)}</strong><span>${escapeHtml(user.email)} - ${escapeHtml(user.role)}</span></div>`).join("");
+  }
   elements.assigneeSelect.innerHTML = `<option value="">Unassigned</option>${data.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("")}`;
+  renderMentionSuggestions();
+}
+
+function renderMentionSuggestions() {
+  if (!elements.mentionSuggestions) return;
+  elements.mentionSuggestions.innerHTML = state.users.map((user) => `<option value="@${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("");
+  updateMentionHint();
+}
+
+function mentionedUsersInText(text) {
+  const lower = String(text || "").toLowerCase();
+  return state.users.filter((user) => {
+    const email = String(user.email || "").toLowerCase();
+    const name = String(user.name || "").toLowerCase();
+    const first = name.split(/\s+/).find(Boolean) || "";
+    return email && (lower.includes(`@${email}`) || lower.includes(`@${email.split("@")[0]}`) || (first && lower.includes(`@${first}`)));
+  });
+}
+
+function updateMentionHint() {
+  if (!elements.mentionHint) return;
+  const mentions = mentionedUsersInText(elements.commentInput?.value || "").filter((user) => user.email !== state.user?.email);
+  elements.mentionHint.textContent = mentions.length
+    ? `Will notify ${mentions.map((user) => user.name || user.email).join(", ")}`
+    : state.users.length
+      ? `Mention teammates with @name or @email`
+      : "";
+}
+
+async function loadNotifications() {
+  if (!state.user) return;
+  const { data, unreadCount } = await api("/api/notifications");
+  state.notifications = data;
+  state.unreadNotifications = unreadCount || 0;
+  renderNotifications();
+}
+
+function renderNotifications() {
+  elements.notificationBadge.hidden = !state.unreadNotifications;
+  elements.notificationBadge.textContent = state.unreadNotifications > 99 ? "99+" : String(state.unreadNotifications);
+  elements.notificationsList.innerHTML = state.notifications.map((notification) => `
+    <button class="notificationItem ${notification.unread ? "unread" : ""}" type="button" data-id="${escapeHtml(notification.id)}" data-url="${escapeHtml(notification.url || "")}">
+      <span class="notificationDot" aria-hidden="true"></span>
+      <strong>${escapeHtml(notification.subject)}</strong>
+      <small>${escapeHtml(relativeTime(notification.createdAt))}${notification.fileName ? ` - ${escapeHtml(notification.fileName)}` : ""}</small>
+      <span>${escapeHtml(notification.type || "notification")}</span>
+    </button>
+  `).join("") || `<p class="muted">No notifications yet.</p>`;
+}
+
+function toggleNotifications(force) {
+  const next = typeof force === "boolean" ? force : elements.notificationsPanel.hidden;
+  elements.notificationsPanel.hidden = !next;
+  elements.notificationsButton.setAttribute("aria-expanded", String(next));
+  if (next) loadNotifications().catch(() => {});
+}
+
+async function handleNotificationClick(event) {
+  const item = event.target.closest(".notificationItem");
+  if (!item) return;
+  await api(`/api/notifications/${item.dataset.id}/read`, { method: "PATCH" }).catch(() => {});
+  const url = item.dataset.url;
+  await loadNotifications().catch(() => {});
+  toggleNotifications(false);
+  if (url) location.href = url;
 }
 
 async function createUser(event) {
@@ -310,6 +402,7 @@ async function updatePassword(event) {
 async function bootStorage() {
   await loadConfig();
   await loadUsers();
+  await loadNotifications();
   await loadApiSettings();
   await loadAccounts();
 }
@@ -1167,7 +1260,9 @@ async function addComment(event) {
     body: JSON.stringify({ text: elements.commentInput.value, timestamp: elements.videoPlayer.currentTime || 0 }),
   });
   elements.commentInput.value = "";
+  updateMentionHint();
   await loadComments(state.selectedAsset);
+  await loadNotifications().catch(() => {});
 }
 
 async function handleCommentAction(event) {
@@ -1224,6 +1319,9 @@ function updatePlayerUi() {
 
 elements.authForm.addEventListener("submit", handleLogin);
 elements.appLogoutButton.addEventListener("click", handleLogout);
+elements.notificationsButton.addEventListener("click", () => toggleNotifications());
+elements.closeNotificationsButton.addEventListener("click", () => toggleNotifications(false));
+elements.notificationsList.addEventListener("click", handleNotificationClick);
 elements.settingsButton.addEventListener("click", () => {
   elements.sidebar.classList.toggle("open");
   elements.settingsButton.setAttribute("aria-expanded", String(elements.sidebar.classList.contains("open")));
@@ -1284,6 +1382,7 @@ elements.openFrameButton.addEventListener("click", shareSelectedAsset);
 elements.renameButton.addEventListener("click", () => state.selectedAsset && renameAsset(state.selectedAsset));
 elements.deleteButton.addEventListener("click", () => state.selectedAsset && deleteAsset(state.selectedAsset));
 elements.commentForm.addEventListener("submit", addComment);
+elements.commentInput.addEventListener("input", updateMentionHint);
 elements.commentsList.addEventListener("click", handleCommentAction);
 document.querySelectorAll(".commentFilter").forEach((button) => {
   button.addEventListener("click", () => {
@@ -1300,3 +1399,6 @@ loadSession().catch((error) => {
   elements.authError.textContent = error.message;
   elements.authError.hidden = false;
 });
+setInterval(() => {
+  if (state.user) loadNotifications().catch(() => {});
+}, 60000);

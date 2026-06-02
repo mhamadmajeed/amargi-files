@@ -6394,3 +6394,145 @@ body.reviewMode .commentForm .primaryButton {
     grid-template-columns: 28px minmax(0, 1fr);
   }
 }
+
+.iconOnlyButton {
+  position: relative;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
+.iconOnlyButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.notificationBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid #0b0f16;
+  border-radius: 999px;
+  background: #6d5cff;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.notificationsPanel {
+  position: fixed;
+  top: 76px;
+  right: 22px;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 100px));
+  border: 1px solid #252c3d;
+  border-radius: 14px;
+  background: #111722;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.notificationsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #222a3a;
+}
+
+.notificationsHeader strong {
+  color: #f5f7fb;
+  font-size: 0.92rem;
+}
+
+.notificationsHeader button {
+  border: 0;
+  background: transparent;
+  color: #8f98aa;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.notificationsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  overflow: auto;
+}
+
+.notificationItem {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  gap: 5px 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #dce2ef;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notificationItem:hover {
+  border-color: #30384d;
+  background: #171d2a;
+}
+
+.notificationItem.unread {
+  background: #181e2d;
+}
+
+.notificationDot {
+  grid-row: 1 / 4;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.notificationItem.unread .notificationDot {
+  background: #6d5cff;
+}
+
+.notificationItem strong {
+  overflow: hidden;
+  color: #f6f8fc;
+  font-size: 0.84rem;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notificationItem small,
+.notificationItem span:last-child {
+  grid-column: 2;
+  color: #8f98aa;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.mentionHint {
+  grid-column: 2;
+  margin-top: -6px;
+  color: #8f98aa;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+body.reviewMode .commentForm .mentionHint {
+  grid-column: 2;
+}

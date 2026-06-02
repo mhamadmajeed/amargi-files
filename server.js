@@ -768,6 +768,38 @@ async function recordNotification(notification) {
   return item;
 }
 
+function notificationRecipients(notification) {
+  return String(notification.to || "")
+    .split(",")
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean);
+}
+
+function notificationVisibleTo(notification, user) {
+  const recipients = notificationRecipients(notification);
+  if (!recipients.length) return user?.role === "admin";
+  return recipients.includes(normalizeEmail(user?.email));
+}
+
+function toApiNotification(notification, user) {
+  const email = normalizeEmail(user?.email);
+  const readBy = notification.readBy || {};
+  return {
+    id: notification.id,
+    type: notification.type || "activity",
+    subject: notification.subject || "Notification",
+    text: notification.text || "",
+    fileName: notification.fileName || "",
+    fileId: notification.fileId || "",
+    url: notification.url || "",
+    status: notification.status || "",
+    actor: notification.actor || "",
+    createdAt: notification.createdAt,
+    readAt: readBy[email] || "",
+    unread: !readBy[email],
+  };
+}
+
 app.get("/auth/app/session", async (request, response, next) => {
   try {
     await loadAppSettings();
@@ -925,6 +957,35 @@ app.get("/api/users", requireAppSession, async (_request, response, next) => {
   try {
     const users = await readUsers();
     response.json({ data: users.map(publicUser) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/notifications", requireAppSession, async (request, response, next) => {
+  try {
+    const notifications = await readJson(NOTIFICATIONS_PATH, [], "notifications.json");
+    const visible = notifications
+      .filter((notification) => notificationVisibleTo(notification, request.appUser))
+      .map((notification) => toApiNotification(notification, request.appUser));
+    response.json({ data: visible, unreadCount: visible.filter((notification) => notification.unread).length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/notifications/:notificationId/read", requireAppSession, async (request, response, next) => {
+  try {
+    const notifications = await readJson(NOTIFICATIONS_PATH, [], "notifications.json");
+    const notification = notifications.find((item) => item.id === request.params.notificationId);
+    if (!notification || !notificationVisibleTo(notification, request.appUser)) {
+      response.status(404).json({ error: "Notification not found." });
+      return;
+    }
+    notification.readBy ||= {};
+    notification.readBy[normalizeEmail(request.appUser.email)] = new Date().toISOString();
+    await writeJson(NOTIFICATIONS_PATH, notifications.slice(0, 200), "notifications.json");
+    response.json({ data: toApiNotification(notification, request.appUser) });
   } catch (error) {
     next(error);
   }
@@ -1492,6 +1553,8 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, a
         `Open review: ${reviewUrl(request, file.id)}`,
       ].join("\n"),
       fileName: file.name,
+      fileId: file.id,
+      url: reviewUrl(request, file.id),
       actor: request.appUser.email,
     })));
     response.status(201).json({ data: comment });
@@ -1566,6 +1629,8 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
           `Open review: ${reviewUrl(request, workflowFile.id)}`,
         ].join("\n"),
         fileName: workflowFile.name,
+        fileId: workflowFile.id,
+        url: reviewUrl(request, workflowFile.id),
         status: normalizedStatus,
         actor: request.appUser.email,
       });
