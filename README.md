@@ -22,9 +22,25 @@ On Vercel, also set:
 ```bash
 BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 APP_SECURE_COOKIES=true
+APP_URL=https://amargi-files.vercel.app
 ```
 
 Vercel Blob is used only for JSON metadata persistence. The media files themselves live in R2.
+
+## Email Notifications
+
+Set SMTP environment variables to send email when a user is assigned to a file or mentioned in a comment. For Zoho EU mailboxes:
+
+```bash
+SMTP_HOST=smtp.zoho.eu
+SMTP_PORT=465
+SMTP_USER=footage@theamargi.com
+SMTP_PASS=your_mailbox_or_app_password
+SMTP_FROM=Amargi Files <footage@theamargi.com>
+SMTP_SECURE=true
+```
+
+Mentions work with `@email@example.com`, `@username`, or a user's first/last name from their profile.
 
 ## Metadata Database
 

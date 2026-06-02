@@ -633,6 +633,48 @@ function workflowFor(fileId, workflows, users) {
   return { ...workflow, assigneeName: workflow.assigneeName || assignee?.name || "" };
 }
 
+function appOrigin(request) {
+  const configured = process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || "";
+  if (configured) return configured.startsWith("http") ? configured : `https://${configured}`;
+  return `${request.protocol}://${request.get("host")}`;
+}
+
+function reviewUrl(request, fileId) {
+  return `${appOrigin(request)}/?file=${encodeURIComponent(fileId)}`;
+}
+
+function humanStatus(status) {
+  return String(status || "work_in_progress")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function commentTimestamp(value) {
+  const seconds = Math.max(0, Math.floor(Number(value) || 0));
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+function mentionTokens(text) {
+  return Array.from(new Set(String(text || "").match(/@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|[A-Za-z][A-Za-z0-9._-]*)/g) || []))
+    .map((token) => token.slice(1).toLowerCase());
+}
+
+function mentionedUsers(text, users, actorEmail) {
+  const tokens = mentionTokens(text);
+  const actor = normalizeEmail(actorEmail);
+  return users.filter((user) => {
+    const email = normalizeEmail(user.email);
+    if (!email || email === actor) return false;
+    const names = String(user.name || "")
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    return tokens.some((token) => token === email || token === email.split("@")[0] || names.includes(token));
+  });
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
@@ -642,7 +684,11 @@ async function recordNotification(notification) {
   const item = { id: crypto.randomUUID(), ...notification, createdAt: new Date().toISOString() };
   data.unshift(item);
   await writeJson(NOTIFICATIONS_PATH, data.slice(0, 200), "notifications.json");
-  if (getSetting("SMTP_HOST") && getSetting("NOTIFICATION_RECIPIENTS")) {
+  const recipients = Array.from(new Set([
+    ...String(notification.to || "").split(","),
+    ...String(getSetting("NOTIFICATION_RECIPIENTS") || "").split(","),
+  ].map((email) => normalizeEmail(email)).filter(Boolean)));
+  if (getSetting("SMTP_HOST") && recipients.length) {
     const transporter = nodemailer.createTransport({
       host: getSetting("SMTP_HOST"),
       port: Number(getSetting("SMTP_PORT") || 587),
@@ -651,7 +697,7 @@ async function recordNotification(notification) {
     });
     await transporter.sendMail({
       from: getSetting("SMTP_FROM") || getSetting("SMTP_USER"),
-      to: getSetting("NOTIFICATION_RECIPIENTS"),
+      to: recipients.join(","),
       subject: notification.subject,
       text: notification.text,
     }).catch(() => {});
@@ -1287,7 +1333,7 @@ app.delete("/api/accounts/:accountId/files/:fileId", async (request, response, n
   }
 });
 
-app.get("/api/accounts/:accountId/files/:fileId/comments", async (request, response, next) => {
+app.get("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, async (request, response, next) => {
   try {
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
@@ -1298,7 +1344,7 @@ app.get("/api/accounts/:accountId/files/:fileId/comments", async (request, respo
   }
 });
 
-app.post("/api/accounts/:accountId/files/:fileId/comments", async (request, response, next) => {
+app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, async (request, response, next) => {
   try {
     const { text, timestamp } = request.body || {};
     if (!String(text || "").trim()) {
@@ -1317,6 +1363,24 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", async (request, resp
     };
     db.comments[file.id] = [...(db.comments[file.id] || []), comment];
     await writeMediaDb(db);
+    const users = await readUsers();
+    const mentions = mentionedUsers(comment.text, users, request.appUser.email);
+    await Promise.all(mentions.map((user) => recordNotification({
+      type: "mention",
+      to: user.email,
+      subject: `${request.appUser.name || request.appUser.email} mentioned you on ${file.name}`,
+      text: [
+        `${request.appUser.name || request.appUser.email} mentioned you in a comment.`,
+        "",
+        `File: ${file.name}`,
+        `Timestamp: ${commentTimestamp(comment.timestamp)}`,
+        `Comment: ${comment.text}`,
+        "",
+        `Open review: ${reviewUrl(request, file.id)}`,
+      ].join("\n"),
+      fileName: file.name,
+      actor: request.appUser.email,
+    })));
     response.status(201).json({ data: comment });
   } catch (error) {
     next(error);
@@ -1357,6 +1421,7 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
       return;
     }
     const workflows = await readWorkflows();
+    const previous = workflows[request.params.fileId] || {};
     const assignee = normalizedAssignee ? users.find((user) => user.email === normalizedAssignee) : null;
     workflows[request.params.fileId] = {
       assigneeEmail: normalizedAssignee,
@@ -1366,6 +1431,26 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
       updatedBy: request.appUser.email,
     };
     await writeWorkflows(workflows);
+    if (assignee && normalizeEmail(previous.assigneeEmail) !== normalizedAssignee) {
+      const db = await readMediaDb();
+      const file = getFileRecord(db, request.params.fileId);
+      await recordNotification({
+        type: "assignment",
+        to: assignee.email,
+        subject: `You were assigned to ${file.name}`,
+        text: [
+          `${request.appUser.name || request.appUser.email} assigned you to a file.`,
+          "",
+          `File: ${file.name}`,
+          `Status: ${humanStatus(normalizedStatus)}`,
+          "",
+          `Open review: ${reviewUrl(request, file.id)}`,
+        ].join("\n"),
+        fileName: file.name,
+        status: normalizedStatus,
+        actor: request.appUser.email,
+      });
+    }
     response.json({ data: workflowFor(request.params.fileId, workflows, users) });
   } catch (error) {
     next(error);
