@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Amargi Files</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <section id="authGate" class="authGate">
+      <form id="authForm" class="authPanel">
+        <div class="brand authBrand">
+          <span class="brandMark">M</span>
+          <div>
+            <strong>Amargi Files</strong>
+            <small id="authSubtitle">Sign in to continue</small>
+          </div>
+        </div>
+
+        <label>
+          Email
+          <input id="authEmail" type="email" autocomplete="email" required />
+        </label>
+
+        <label>
+          Password
+          <input id="authPassword" type="password" autocomplete="current-password" minlength="8" required />
+        </label>
+
+        <div id="authError" class="alert" hidden></div>
+
+        <button id="authSubmitButton" class="primaryButton" type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <main class="shell">
+      <header class="appHeader">
+        <div class="brand">
+          <span class="brandMark">M</span>
+          <div>
+            <strong>Amargi Files</strong>
+            <small>Private review storage</small>
+          </div>
+        </div>
+
+        <div class="quickControls">
+          <button id="settingsButton" class="ghostButton settingsTrigger" type="button" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 1 1-2.83 2.83l-.05-.05a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 1 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.4 9c.32.66.91 1 1.55 1H21a2 2 0 1 1 0 4h-.08a1.7 1.7 0 0 0-1.55 1Z"/></svg>
+            Settings
+          </button>
+          <button id="localTabButton" class="ghostButton active" type="button">Local Storage</button>
+          <label class="compactControl">
+            <span>Project</span>
+            <select id="projectSelect" disabled>
+              <option value="">Choose workspace</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <aside id="sidebar" class="sidebar" aria-label="Settings">
+        <div class="settingsHeader">
+          <strong>Settings</strong>
+          <span>Account, workspace, and admin controls</span>
+        </div>
+
+        <div class="connectionControls">
+          <span id="connectionBadge" class="badge">Checking</span>
+          <span id="memberBadge" class="badge">Signed out</span>
+          <a id="connectButton" class="connectButton" href="#" hidden>Connect</a>
+          <button id="disconnectButton" class="ghostButton" type="button" hidden>Disconnect</button>
+          <button id="appLogoutButton" class="ghostButton" type="button">Sign out</button>
+        </div>
+
+        <section class="settingsGroup">
+          <div>
+            <p class="eyebrow">Storage</p>
+            <strong>Library</strong>
+          </div>
+          <label>
+            Account
+            <select id="accountSelect">
+              <option value="">Load accounts</option>
+            </select>
+          </label>
+
+          <label>
+            Workspace
+            <select id="workspaceSelect" disabled>
+              <option value="">Choose account</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="accountPanel">
+          <div>
+            <p class="eyebrow">Account</p>
+            <strong>Change password</strong>
+          </div>
+          <form id="passwordForm" class="adminUserForm">
+            <label>
+              Current password
+              <input id="currentPassword" type="password" autocomplete="current-password" required />
+            </label>
+            <label>
+              New password
+              <input id="updatedPassword" type="password" autocomplete="new-password" minlength="8" required />
+            </label>
+            <label>
+              Confirm new password
+              <input id="confirmUpdatedPassword" type="password" autocomplete="new-password" minlength="8" required />
+            </label>
+            <button id="updatePasswordButton" class="primaryButton" type="submit">Update password</button>
+            <div id="passwordMessage" class="muted"></div>
+          </form>
+        </section>
+
+        <section id="adminPanel" class="adminPanel" hidden>
+          <div class="settingsGroupHeader">
+            <p class="eyebrow">Admin</p>
+            <strong>Create user</strong>
+          </div>
+          <form id="adminUserForm" class="adminUserForm">
+            <label>
+              Name
+              <input id="newUserName" type="text" autocomplete="off" />
+            </label>
+            <label>
+              Email
+              <input id="newUserEmail" type="email" autocomplete="off" required />
+            </label>
+            <label>
+              Password
+              <input id="newUserPassword" type="password" autocomplete="new-password" minlength="8" required />
+            </label>
+            <label>
+              Role
+              <select id="newUserRole">
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <button id="createUserButton" class="primaryButton" type="submit">Create user</button>
+            <div id="adminUserMessage" class="muted"></div>
+          </form>
+          <div class="adminUsersList" id="adminUsersList"></div>
+
+          <div class="settingsGroupHeader">
+            <p class="eyebrow">Cloudflare R2</p>
+            <strong>Storage settings</strong>
+          </div>
+          <form id="apiSettingsForm" class="adminUserForm">
+            <label>
+              Bucket
+              <input id="r2Bucket" type="text" autocomplete="off" placeholder="my-review-bucket" />
+            </label>
+            <label>
+              Account ID
+              <input id="r2AccountId" type="text" autocomplete="off" placeholder="Cloudflare account ID" />
+            </label>
+            <label>
+              Endpoint
+              <input id="r2Endpoint" type="text" autocomplete="off" placeholder="https://<account>.r2.cloudflarestorage.com" />
+            </label>
+            <label>
+              Access key ID
+              <input id="r2AccessKeyId" type="text" autocomplete="off" placeholder="Leave blank to keep current" />
+            </label>
+            <label>
+              Secret access key
+              <input id="r2SecretAccessKey" type="password" autocomplete="off" placeholder="Leave blank to keep current" />
+            </label>
+            <div class="settingsGroupHeader">
+              <p class="eyebrow">Email notifications</p>
+              <strong>SMTP settings</strong>
+            </div>
+            <label>
+              SMTP host
+              <input id="smtpHost" type="text" autocomplete="off" placeholder="smtp.gmail.com" />
+            </label>
+            <label>
+              SMTP port
+              <input id="smtpPort" type="text" autocomplete="off" placeholder="587" />
+            </label>
+            <label>
+              SMTP username
+              <input id="smtpUser" type="text" autocomplete="off" />
+            </label>
+            <label>
+              SMTP password
+              <input id="smtpPass" type="password" autocomplete="off" placeholder="Leave blank to keep current" />
+            </label>
+            <label>
+              From email
+              <input id="smtpFrom" type="text" autocomplete="off" placeholder="Amargi Files <no-reply@example.com>" />
+            </label>
+            <label>
+              Notification recipients
+              <input id="notificationRecipients" type="text" autocomplete="off" placeholder="team@example.com, producer@example.com" />
+            </label>
+            <label class="checkboxLabel">
+              <input id="smtpSecure" type="checkbox" />
+              Use SSL/TLS SMTP
+            </label>
+            <button id="saveApiSettingsButton" class="primaryButton" type="submit">Save API settings</button>
+            <div id="apiSettingsMessage" class="muted"></div>
+          </form>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Review workspace</p>
+            <h1 id="workspaceTitle">Choose a project</h1>
+          </div>
+          <span class="workspaceHint">Folders first. Open a video to review.</span>
+        </header>
+
+        <div id="alert" class="alert" hidden></div>
+
+        <div class="layout">
+          <aside class="folderSidebar" aria-label="Folder shortcuts">
+            <div class="folderSidebarHeader">
+              <strong>Assets</strong>
+              <button id="sidebarCreateFolderButton" class="folderSidebarAdd" type="button" title="Create folder">+</button>
+            </div>
+            <div id="folderTree" class="folderTree" aria-live="polite"></div>
+          </aside>
+          <section class="assetPane" aria-label="Assets">
+            <div class="folderPanel">
+              <div class="folderTrail">
+                <button id="backFolderButton" class="iconButton" type="button" disabled aria-label="Go to parent folder">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                </button>
+                <div>
+                  <span>Folder</span>
+                  <strong id="folderName">No project selected</strong>
+                  <nav id="folderBreadcrumbs" class="folderBreadcrumbs" aria-label="Folder path"></nav>
+                </div>
+              </div>
+              <div class="folderPanelActions">
+                <button id="createFolderButton" class="ghostButton iconTextButton" type="button" disabled title="Create folder">
+                  <span class="buttonIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>
+                  Folder
+                </button>
+                <button id="refreshButton" class="ghostButton iconTextButton" type="button" title="Refresh">
+                  <span class="buttonIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.4 6.36"/><path d="M3 12A9 9 0 0 1 18.4 5.64"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg></span>
+                  Refresh
+                </button>
+              </div>
+              <form id="uploadForm" class="uploadCard">
+                <label class="filePicker" for="fileInput">
+                  <input id="fileInput" type="file" multiple />
+                  <span class="filePickerIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>
+                  <span id="selectedFileName" class="filePickerText">Choose file</span>
+                </label>
+                <button id="uploadButton" class="uploadSubmit" type="submit" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
+                  Upload
+                </button>
+                <div class="progressMeta">
+                  <span id="progressLabel">Ready</span>
+                  <span id="progressPercent">0%</span>
+                </div>
+                <progress id="progressBar" value="0" max="100"></progress>
+              </form>
+              <div id="uploadQueue" class="uploadQueue" aria-live="polite"></div>
+            </div>
+            <div class="paneHeader">
+              <div>
+                <strong>Assets</strong>
+                <small>Folders and videos</small>
+              </div>
+              <div class="assetHeaderTools">
+                <div class="viewToggle" aria-label="Asset view">
+                  <button id="gridViewButton" class="active" type="button" data-view="grid">Grid</button>
+                  <button id="listViewButton" type="button" data-view="list">List</button>
+                </div>
+                <span id="assetCount">0 files</span>
+              </div>
+            </div>
+            <div id="folderList" class="assetGrid" aria-live="polite"></div>
+            <div id="dropOverlay" class="dropOverlay" aria-hidden="true" hidden>
+              <div>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
+                <strong>Drop to upload</strong>
+                <span>Files will upload here. Drop on a folder to upload into it.</span>
+              </div>
+            </div>
+            <div id="assetContextMenu" class="fileContextMenu" hidden role="menu"></div>
+          </section>
+
+          <section class="reviewPane" aria-label="Review">
+            <div id="emptyState" class="emptyState">
+              <strong>Select a video</strong>
+              <span>Pick an asset to review, rename, comment, or delete.</span>
+            </div>
+
+            <article id="detailView" class="detailView" hidden>
+              <nav class="reviewIconRail" aria-label="Review navigation">
+                <button id="reviewHomeButton" type="button" aria-label="Back to folders">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/></svg>
+                </button>
+                <span></span>
+              </nav>
+              <header class="reviewTopbar">
+                <div class="reviewBreadcrumb">
+                  <button id="reviewBackButton" type="button" aria-label="Back to folders">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <button id="reviewProjectTitle" type="button">Project</button>
+                  <span>/</span>
+                  <button id="reviewFileTitle" type="button">Untitled</button>
+                </div>
+                <div class="reviewTopActions">
+                  <button id="reviewShareButton" class="reviewShareButton" type="button">Share</button>
+                </div>
+              </header>
+              <div class="reviewMain">
+                <div class="viewer">
+                  <video id="videoPlayer" playsinline></video>
+                  <button id="centerPlayButton" class="centerPlayButton" type="button" aria-label="Play video">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                  </button>
+                  <div id="videoFallback" class="videoFallback" hidden>No playable preview URL was returned for this file.</div>
+                  <div class="playerControls" aria-label="Video controls">
+                    <button id="playPauseButton" class="playerButton" type="button" aria-label="Play">Play</button>
+                    <span id="currentTimeLabel" class="timeLabel">00:00</span>
+                    <div class="seekTrack">
+                      <div id="commentMarkers" class="commentMarkers" aria-hidden="true"></div>
+                      <input id="seekBar" class="seekBar" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek video" />
+                    </div>
+                    <span id="durationLabel" class="timeLabel">00:00</span>
+                    <select id="playbackQualitySelect" class="qualitySelect" aria-label="Playback quality">
+                      <option value="1080">1080p</option>
+                      <option value="720">720p</option>
+                      <option value="480">480p</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="assetTools">
+                  <div class="assetToolsLeft">
+                    <button id="closeReviewButton" class="ghostButton iconTextButton" type="button">
+                      <span class="buttonIcon" aria-hidden="true">&larr;</span>
+                      Folders
+                    </button>
+                    <div class="assetIdentity">
+                      <p class="eyebrow">Selected file</p>
+                      <h2 id="assetTitle">Untitled</h2>
+                      <span id="assetMeta" class="muted"></span>
+                    </div>
+                  </div>
+                  <div class="workflowControls">
+                    <label class="reviewField assignmentField">
+                      <span>Assigned</span>
+                      <select id="assigneeSelect">
+                        <option value="">Unassigned</option>
+                      </select>
+                    </label>
+                    <label class="reviewField statusField">
+                      <span>Status</span>
+                      <select id="statusSelect">
+                        <option value="work_in_progress">Work in progress</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="approved">Approved</option>
+                        <option value="published">Published</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="toolButtons">
+                    <button id="openFrameButton" class="ghostButton" type="button">Share</button>
+                    <select id="downloadSelect" class="downloadSelect" disabled>
+                      <option value="">Download</option>
+                    </select>
+                    <button id="renameButton" class="ghostButton" type="button">Rename</button>
+                    <button id="deleteButton" class="dangerButton" type="button">Delete</button>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="reviewSide">
+                <section class="commentsPanel">
+                  <div class="paneHeader">
+                    <strong>Comments</strong>
+                    <div class="commentHeaderTools">
+                      <button class="commentFilter active" type="button" data-comment-filter="all">All</button>
+                      <button class="commentFilter" type="button" data-comment-filter="open">Open</button>
+                      <button class="commentFilter" type="button" data-comment-filter="resolved">Solved</button>
+                      <span id="commentCount">0</span>
+                    </div>
+                  </div>
+                  <div id="commentsList" class="commentsList"></div>
+                  <form id="commentForm" class="commentForm">
+                    <textarea id="commentInput" rows="3" placeholder="Write a comment"></textarea>
+                    <button id="commentButton" class="primaryButton" type="submit">Post</button>
+                  </form>
+                </section>
+              </aside>
+            </article>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+node_modules/
+
+.env
+.env.*
+!.env.example
+.data/
+.vercel/
+
+*.log
+.server-*.log
+localhost*.pem
+localhost*-key.pem
+mkcert.exe
