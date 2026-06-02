@@ -253,16 +253,10 @@
                   Refresh
                 </button>
               </div>
-              <form id="uploadForm" class="uploadCard">
-                <label class="filePicker" for="fileInput">
-                  <input id="fileInput" type="file" multiple />
-                  <span class="filePickerIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>
-                  <span id="selectedFileName" class="filePickerText">Choose file</span>
-                </label>
-                <button id="uploadButton" class="uploadSubmit" type="submit" disabled>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
-                  Upload
-                </button>
+              <form id="uploadForm" class="uploadCard backgroundUploader" aria-hidden="true">
+                <input id="fileInput" type="file" multiple tabindex="-1" />
+                <span id="selectedFileName" class="filePickerText">Choose file</span>
+                <button id="uploadButton" class="uploadSubmit" type="submit" disabled tabindex="-1">Upload</button>
                 <div class="progressMeta">
                   <span id="progressLabel">Ready</span>
                   <span id="progressPercent">0%</span>
