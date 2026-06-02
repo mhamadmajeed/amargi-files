@@ -147,26 +147,30 @@
 
           <div class="settingsGroupHeader">
             <p class="eyebrow">Cloudflare R2</p>
-            <strong>Storage settings</strong>
+            <strong>Backend storage</strong>
+          </div>
+          <div class="storageStatusCard">
+            <span id="r2BackendStatus">Checking storage...</span>
+            <small>R2 is configured from backend environment variables. Bucket keys are no longer edited in the app.</small>
           </div>
           <form id="apiSettingsForm" class="adminUserForm">
-            <label>
+            <label hidden>
               Bucket
               <input id="r2Bucket" type="text" autocomplete="off" placeholder="my-review-bucket" />
             </label>
-            <label>
+            <label hidden>
               Account ID
               <input id="r2AccountId" type="text" autocomplete="off" placeholder="Cloudflare account ID" />
             </label>
-            <label>
+            <label hidden>
               Endpoint
               <input id="r2Endpoint" type="text" autocomplete="off" placeholder="https://<account>.r2.cloudflarestorage.com" />
             </label>
-            <label>
+            <label hidden>
               Access key ID
               <input id="r2AccessKeyId" type="text" autocomplete="off" placeholder="Leave blank to keep current" />
             </label>
-            <label>
+            <label hidden>
               Secret access key
               <input id="r2SecretAccessKey" type="password" autocomplete="off" placeholder="Leave blank to keep current" />
             </label>

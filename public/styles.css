@@ -198,6 +198,25 @@ button {
   gap: 10px;
 }
 
+.storageStatusCard {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+
+.storageStatusCard span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.storageStatusCard small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .adminUserItem {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

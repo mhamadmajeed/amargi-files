@@ -23,6 +23,7 @@ const elements = {
   adminUsersList: $("#adminUsersList"),
   apiSettingsForm: $("#apiSettingsForm"),
   apiSettingsMessage: $("#apiSettingsMessage"),
+  r2BackendStatus: $("#r2BackendStatus"),
   r2Bucket: $("#r2Bucket"),
   r2AccountId: $("#r2AccountId"),
   r2Endpoint: $("#r2Endpoint"),
@@ -199,7 +200,7 @@ async function loadConfig() {
   const config = await api("/api/config");
   elements.connectionBadge.textContent = config.connected ? "R2 connected" : "Storage missing";
   elements.connectionBadge.classList.toggle("warning", !config.connected);
-  if (!config.connected) setAlert("Cloudflare R2 is not configured. Open Settings as admin, enter the R2 storage settings, then save.");
+  if (!config.connected) setAlert("Cloudflare R2 is not configured on the backend. Add the R2 environment variables in Vercel and redeploy.");
   else setAlert("");
   return config.connected;
 }
@@ -215,6 +216,9 @@ async function loadApiSettings() {
     elements.r2AccessKeyId.placeholder = data.r2AccessKeyId?.configured ? `Current: ${data.r2AccessKeyId.masked}` : "Not set";
     elements.r2SecretAccessKey.value = "";
     elements.r2SecretAccessKey.placeholder = data.r2SecretAccessKey?.configured ? `Current: ${data.r2SecretAccessKey.masked}` : "Not set";
+    if (elements.r2BackendStatus) {
+      elements.r2BackendStatus.textContent = data.r2Configured ? `R2 connected: ${data.r2Bucket || "bucket configured"}` : "R2 backend environment is missing.";
+    }
     elements.smtpHost.value = data.smtpHost || "";
     elements.smtpPort.value = data.smtpPort || "587";
     elements.smtpUser.value = data.smtpUser || "";
@@ -223,7 +227,7 @@ async function loadApiSettings() {
     elements.smtpFrom.value = data.smtpFrom || "";
     elements.smtpSecure.checked = Boolean(data.smtpSecure);
     elements.notificationRecipients.value = data.notificationRecipients || "";
-    elements.apiSettingsMessage.textContent = data.r2Configured ? "Cloudflare R2 is configured." : "Enter Cloudflare R2 settings here, then save.";
+    elements.apiSettingsMessage.textContent = "Email notification settings are saved here. R2 storage is configured in the backend.";
   } catch (error) {
     elements.apiSettingsMessage.textContent = error.message;
   }
@@ -237,11 +241,6 @@ async function saveApiSettings(event) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        r2Bucket: elements.r2Bucket.value,
-        r2AccountId: elements.r2AccountId.value,
-        r2Endpoint: elements.r2Endpoint.value,
-        r2AccessKeyId: elements.r2AccessKeyId.value,
-        r2SecretAccessKey: elements.r2SecretAccessKey.value,
         smtpHost: elements.smtpHost.value,
         smtpPort: elements.smtpPort.value,
         smtpUser: elements.smtpUser.value,

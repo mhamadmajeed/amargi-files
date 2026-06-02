@@ -228,6 +228,10 @@ function getSetting(key) {
   return appSettings[key] || process.env[key] || "";
 }
 
+function getEnvSetting(key) {
+  return process.env[key] || "";
+}
+
 function maskSecret(value) {
   if (!value) return "";
   const text = String(value);
@@ -303,13 +307,13 @@ function cookieOptions() {
 }
 
 function getR2Config() {
-  const accountId = getSetting("R2_ACCOUNT_ID") || getSetting("CLOUDFLARE_ACCOUNT_ID");
+  const accountId = getEnvSetting("R2_ACCOUNT_ID") || getEnvSetting("CLOUDFLARE_ACCOUNT_ID");
   return {
     accountId,
-    bucket: getSetting("R2_BUCKET"),
-    accessKeyId: getSetting("R2_ACCESS_KEY_ID"),
-    secretAccessKey: getSetting("R2_SECRET_ACCESS_KEY"),
-    endpoint: getSetting("R2_ENDPOINT") || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : ""),
+    bucket: getEnvSetting("R2_BUCKET"),
+    accessKeyId: getEnvSetting("R2_ACCESS_KEY_ID"),
+    secretAccessKey: getEnvSetting("R2_SECRET_ACCESS_KEY"),
+    endpoint: getEnvSetting("R2_ENDPOINT") || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : ""),
   };
 }
 
@@ -394,7 +398,7 @@ async function configureBucketCors(origin) {
   const allowedOrigins = Array.from(
     new Set([
       origin,
-      "https://frameio-uploader.vercel.app",
+      "https://amargi-files.vercel.app",
       "http://localhost:4174",
       "https://localhost:4175",
     ].filter(Boolean)),
@@ -698,11 +702,11 @@ app.get("/api/admin/settings", requireAdminSession, async (_request, response, n
     response.json({
       data: {
         r2Configured: hasR2Config(),
-        r2AccountId: getSetting("R2_ACCOUNT_ID") || getSetting("CLOUDFLARE_ACCOUNT_ID"),
-        r2Bucket: getSetting("R2_BUCKET"),
-        r2Endpoint: getSetting("R2_ENDPOINT"),
-        r2AccessKeyId: { configured: Boolean(getSetting("R2_ACCESS_KEY_ID")), masked: maskSecret(getSetting("R2_ACCESS_KEY_ID")) },
-        r2SecretAccessKey: { configured: Boolean(getSetting("R2_SECRET_ACCESS_KEY")), masked: maskSecret(getSetting("R2_SECRET_ACCESS_KEY")) },
+        r2AccountId: getEnvSetting("R2_ACCOUNT_ID") || getEnvSetting("CLOUDFLARE_ACCOUNT_ID"),
+        r2Bucket: getEnvSetting("R2_BUCKET"),
+        r2Endpoint: getEnvSetting("R2_ENDPOINT"),
+        r2AccessKeyId: { configured: Boolean(getEnvSetting("R2_ACCESS_KEY_ID")), masked: maskSecret(getEnvSetting("R2_ACCESS_KEY_ID")) },
+        r2SecretAccessKey: { configured: Boolean(getEnvSetting("R2_SECRET_ACCESS_KEY")), masked: maskSecret(getEnvSetting("R2_SECRET_ACCESS_KEY")) },
         smtpHost: getSetting("SMTP_HOST"),
         smtpPort: getSetting("SMTP_PORT") || "587",
         smtpUser: getSetting("SMTP_USER"),
@@ -726,11 +730,6 @@ app.patch("/api/admin/settings", requireAdminSession, async (request, response, 
       const text = String(value).trim();
       if (text) nextSettings[key] = text;
     };
-    assignIfPresent("R2_ACCOUNT_ID", request.body?.r2AccountId);
-    assignIfPresent("R2_BUCKET", request.body?.r2Bucket);
-    assignIfPresent("R2_ENDPOINT", request.body?.r2Endpoint);
-    assignIfPresent("R2_ACCESS_KEY_ID", request.body?.r2AccessKeyId);
-    assignIfPresent("R2_SECRET_ACCESS_KEY", request.body?.r2SecretAccessKey);
     assignIfPresent("SMTP_HOST", request.body?.smtpHost);
     assignIfPresent("SMTP_PORT", request.body?.smtpPort);
     assignIfPresent("SMTP_USER", request.body?.smtpUser);

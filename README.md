@@ -15,7 +15,7 @@ R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
 APP_SESSION_SECRET=replace-with-a-long-random-string
 ```
 
-`R2_ENDPOINT` is optional when `R2_ACCOUNT_ID` is set. The bucket should stay private. The app creates signed upload and download URLs.
+`R2_ENDPOINT` is optional when `R2_ACCOUNT_ID` is set. The bucket should stay private. The app creates signed upload and download URLs. R2 credentials are backend-only environment variables and are not editable from the web UI.
 
 On Vercel, also set:
 
@@ -90,7 +90,7 @@ npm start
 ```
 
 2. Log in with an admin account.
-3. Confirm the storage badge says R2 connected.
+3. Confirm the storage badge says R2 connected. If it says storage is missing, add the R2 environment variables in Vercel and redeploy.
 4. Create a folder.
 5. Upload a video.
 6. Confirm the original appears in the folder.
