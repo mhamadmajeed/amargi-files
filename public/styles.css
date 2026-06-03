@@ -4283,35 +4283,51 @@ body.reviewMode .workflowControls select {
 }
 
 body.reviewMode .assetTools {
-  margin: 0 12px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
   border: 1px solid #171d26;
   border-top: 0;
   border-radius: 0 0 12px 12px;
   background: #0d1118;
-  padding: 12px;
+  padding: 7px 10px;
+  min-height: 46px;
 }
 
 body.reviewMode .assetIdentity {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 body.reviewMode .assetTools h2 {
-  max-width: 680px;
-  color: #f7f9fd;
-  font-size: 1rem;
-  line-height: 1.24;
+  flex-shrink: 0;
+  max-width: 280px;
+  color: #f0f3fa;
+  font-size: 0.86rem;
+  font-weight: 740;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 body.reviewMode #assetMeta {
-  color: #8993a3;
-  font-size: 0.78rem;
+  flex-shrink: 1;
+  color: #5a6478;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 body.reviewMode .toolButtons .ghostButton,
 body.reviewMode .toolButtons .dangerButton,
 body.reviewMode #closeReviewButton {
-  min-height: 34px;
+  min-height: 32px;
 }
 
 body.reviewMode .reviewSide {
@@ -4471,11 +4487,12 @@ body.reviewMode .assetTools {
 }
 
 .assetToolsLeft {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 body.reviewMode #closeReviewButton {
@@ -4512,14 +4529,8 @@ body.reviewMode #assetMeta {
   font-size: 0.76rem;
 }
 
-body.reviewMode .workflowControls {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr);
-  gap: 8px;
-}
-
-body.reviewMode .workflowControls .reviewField {
-  width: auto;
+body.reviewMode #closeReviewButton {
+  flex-shrink: 0;
 }
 
 .reviewField {
@@ -4600,23 +4611,24 @@ body.reviewMode .workflowControls .reviewField {
 }
 
 body.reviewMode .toolButtons {
-  display: grid;
-  grid-template-columns: auto minmax(150px, 1fr) auto auto;
-  gap: 8px;
-  justify-content: end;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 body.reviewMode .toolButtons .ghostButton,
 body.reviewMode .toolButtons .dangerButton,
 body.reviewMode .downloadSelect {
-  min-height: 38px;
-  border-radius: 10px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
 }
 
 body.reviewMode .toolButtons .ghostButton {
-  border-color: #263040;
-  background: #121824;
+  border-color: #1e2738;
+  background: #111720;
 }
 
 body.reviewMode .toolButtons .ghostButton:hover {
@@ -4625,10 +4637,10 @@ body.reviewMode .toolButtons .ghostButton:hover {
 }
 
 body.reviewMode .downloadSelect {
-  min-width: 170px;
-  border-color: #263040;
-  background: #121824;
-  color: #f7f9fd;
+  min-width: 120px;
+  border-color: #1e2738;
+  background: #111720;
+  color: #d8deeb;
 }
 
 body.reviewMode .dangerButton {
@@ -6623,26 +6635,21 @@ body.reviewMode .commentForm .primaryButton {
 
 .downloadControl {
   position: relative;
-  min-width: 180px;
-}
-
-.downloadControl .downloadSelect {
-  width: 100%;
 }
 
 .downloadMenu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   z-index: 40;
   display: grid;
-  width: min(320px, 82vw);
-  gap: 5px;
-  padding: 8px;
-  border: 1px solid #2a3448;
-  border-radius: 12px;
-  background: #0d121b;
-  box-shadow: 0 22px 50px rgb(0 0 0 / 42%);
+  width: min(280px, 90vw);
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid #1e2a3a;
+  border-radius: 10px;
+  background: #0c1119;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 50%);
 }
 
 .downloadMenu[hidden] {
@@ -6650,42 +6657,46 @@ body.reviewMode .commentForm .primaryButton {
 }
 
 .downloadMenuItem {
-  display: grid;
-  gap: 2px;
-  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 7px;
   background: transparent;
-  color: #f7f9ff;
-  padding: 8px 10px;
+  color: #e2e8f4;
+  padding: 6px 8px;
   text-align: left;
   cursor: pointer;
 }
 
 .downloadMenuItem:hover {
-  background: #1a2334;
+  background: #141d2b;
 }
 
 .downloadMenuItem:disabled {
-  cursor: wait;
-  opacity: 0.62;
+  cursor: default;
+  opacity: 0.5;
 }
 
 .downloadMenuItem strong {
-  font-size: 0.82rem;
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 620;
 }
 
 .downloadMenuItem span {
-  color: #9da8ba;
-  font-size: 0.72rem;
+  color: #5a6880;
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 .downloadMenuItem em {
-  margin-top: 2px;
-  color: #8ea2ff;
-  font-size: 0.64rem;
+  color: #7b93ff;
+  font-size: 0.7rem;
   font-style: normal;
-  font-weight: 850;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .uploadQueue {
@@ -6830,73 +6841,90 @@ body.reviewMode .downloadMenuItem span {
 }
 
 .downloadPanel {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 10px;
-  width: 100%;
-  border: 1px solid #222c3e;
-  border-radius: 14px;
-  background: #0c121b;
-  padding: 12px;
-}
-
-.downloadPanelHeader {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 4px;
+  margin: 0 12px 8px;
+  padding: 4px;
+  border: 1px solid #171d26;
+  border-radius: 10px;
+  background: #0c1019;
+  overflow-x: auto;
 }
 
-.downloadPanelHeader strong {
-  color: #f4f7fb;
-  font-size: 0.86rem;
-}
-
-.downloadPanelHeader span {
-  color: #8f9bae;
-  font-size: 0.68rem;
-  text-align: right;
+.downloadPanel[hidden] {
+  display: none;
 }
 
 .downloadPanelOptions {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  gap: 4px;
+  width: 100%;
 }
 
 .downloadPanelOptions .downloadMenuItem {
-  flex: 0 0 168px;
-  position: relative;
-  min-height: 58px;
-  border: 1px solid #2a354a;
-  border-radius: 12px;
-  background: #121925;
-  padding: 10px 12px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  text-align: center;
+  cursor: pointer;
 }
 
-.downloadPanelOptions .downloadMenuItem:not(:disabled)::after {
-  content: "Download";
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
-  color: #8ea2ff;
+.downloadPanelOptions .downloadMenuItem:not(:disabled) {
+  border-color: #1e2a3a;
+  background: #111822;
+}
+
+.downloadPanelOptions .downloadMenuItem:not(:disabled):hover {
+  border-color: rgb(111 99 255 / 50%);
+  background: #151f30;
+}
+
+.downloadPanelOptions .downloadMenuItem:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.downloadPanelOptions .downloadMenuItem strong {
+  font-size: 0.72rem;
+  font-weight: 680;
+  color: #c8d0e0;
+}
+
+.downloadPanelOptions .downloadMenuItem span {
   font-size: 0.62rem;
-  font-weight: 850;
+  color: #4a5568;
 }
 
-.downloadPanelOptions .downloadMenuItem:hover:not(:disabled) {
-  border-color: rgb(111 99 255 / 62%);
-  background: #172031;
+.downloadPanelOptions .downloadMenuItem em {
+  display: none;
 }
 
 .downloadPanelEmpty {
+  flex: 1;
   display: block;
-  border: 1px dashed #2a354a;
-  border-radius: 12px;
-  color: #98a4b7;
-  padding: 14px;
+  color: #3a4558;
+  font-size: 0.72rem;
+  padding: 10px;
   text-align: center;
+}
+
+.workflowPanel {
+  display: flex;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.workflowPanel .reviewField {
+  flex: 1;
 }
 
 body.reviewMode .detailView {

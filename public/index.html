@@ -487,56 +487,51 @@
                       Folders
                     </button>
                     <div class="assetIdentity">
-                      <p class="eyebrow">Selected file</p>
                       <h2 id="assetTitle">Untitled</h2>
                       <span id="assetMeta" class="muted"></span>
-                      <div id="tagEditor" class="tagEditor" hidden>
-                        <div id="tagList" class="tagList"></div>
-                        <form id="tagForm" class="tagForm">
-                          <input id="tagInput" type="text" autocomplete="off" placeholder="Add tag" />
-                          <button class="ghostButton" type="submit">Add</button>
-                        </form>
-                      </div>
                     </div>
-                  </div>
-                  <div class="workflowControls">
-                    <label class="reviewField assignmentField">
-                      <span>Assigned</span>
-                      <select id="assigneeSelect" multiple size="4">
-                        <option value="">Unassigned</option>
-                      </select>
-                    </label>
-                    <label class="reviewField statusField">
-                      <span>Status</span>
-                      <select id="statusSelect">
-                        <option value="work_in_progress">Work in progress</option>
-                        <option value="rejected">Rejected</option>
-                        <option value="approved">Approved</option>
-                        <option value="published">Published</option>
-                      </select>
-                    </label>
                   </div>
                   <div class="toolButtons">
                     <button id="openFrameButton" class="ghostButton" type="button">Share</button>
                     <div class="downloadControl">
-                      <button id="downloadButton" class="downloadSelect" type="button" disabled>Download</button>
+                      <button id="downloadButton" class="downloadSelect" type="button" disabled>↓ Download</button>
                       <div id="downloadMenu" class="downloadMenu" hidden></div>
                     </div>
                     <button id="renameButton" class="ghostButton" type="button">Rename</button>
                     <button id="deleteButton" class="dangerButton" type="button">Delete</button>
                   </div>
                 </div>
+                <div id="tagEditor" class="tagEditor" hidden>
+                  <div id="tagList" class="tagList"></div>
+                  <form id="tagForm" class="tagForm">
+                    <input id="tagInput" type="text" autocomplete="off" placeholder="Add tag" />
+                    <button class="ghostButton" type="submit">Add</button>
+                  </form>
+                </div>
               </div>
 
               <div id="downloadPanel" class="downloadPanel" hidden>
-                <div class="downloadPanelHeader">
-                  <strong>Downloads</strong>
-                  <span>Original and exported versions</span>
-                </div>
                 <div class="downloadPanelOptions"></div>
               </div>
 
               <aside class="reviewSide">
+                <section class="workflowPanel">
+                  <label class="reviewField assignmentField">
+                    <span>Assigned</span>
+                    <select id="assigneeSelect" multiple size="4">
+                      <option value="">Unassigned</option>
+                    </select>
+                  </label>
+                  <label class="reviewField statusField">
+                    <span>Status</span>
+                    <select id="statusSelect">
+                      <option value="work_in_progress">Work in progress</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="approved">Approved</option>
+                      <option value="published">Published</option>
+                    </select>
+                  </label>
+                </section>
                 <section class="commentsPanel">
                   <div class="paneHeader">
                     <strong>Comments</strong>

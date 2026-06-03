@@ -2255,7 +2255,7 @@ async function loadDownloads(asset) {
 
 function downloadOptionMarkup(item) {
   const disabled = item.pending || (!item.url && !item.action);
-  const actionText = item.action === "prepare" ? "Prepare" : "Download";
+  const actionText = item.action === "prepare" ? "Prepare" : "↓";
   return `
     <button class="downloadMenuItem ${disabled ? "pending" : ""}" type="button" data-url="${escapeHtml(item.url || "")}" data-action="${escapeHtml(item.action || "")}" data-export-type="${escapeHtml(item.exportType || "")}" data-quality="${escapeHtml(item.quality || "")}" ${disabled ? "disabled" : ""}>
       <strong>${escapeHtml(item.label)}</strong>
