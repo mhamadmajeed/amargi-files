@@ -173,6 +173,47 @@ const state = {
   destinationPicker: null,
 };
 
+const RECENT_LOCATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const LOCATION_STORAGE_KEY = "mediaflow_recent_location";
+
+function persistFolderLocation() {
+  if (!state.currentProject || !state.folderStack.length) return;
+  const locationState = {
+    projectId: state.currentProject.id,
+    folderStack: state.folderStack,
+    updatedAt: Date.now(),
+  };
+  localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(locationState));
+  localStorage.setItem("mediaflow_project", state.currentProject.id);
+  localStorage.setItem("mediaflow_folder_stack", JSON.stringify(state.folderStack));
+}
+
+function readRecentFolderLocation() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LOCATION_STORAGE_KEY) || "null");
+    if (!stored?.projectId || !Array.isArray(stored.folderStack) || !stored.updatedAt) return null;
+    if (Date.now() - Number(stored.updatedAt) > RECENT_LOCATION_MAX_AGE_MS) return null;
+    return stored;
+  } catch {
+    return null;
+  }
+}
+
+function folderStackIsValid(stack, folders, project) {
+  if (!project || !Array.isArray(stack) || !stack.length) return false;
+  const folderIds = new Set(folders.map((folder) => folder.id));
+  return stack[0]?.id === project.root_folder_id && stack.every((item) => folderIds.has(item.id));
+}
+
+function expandFolderAncestors(folderId, folders = state.folderTree) {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  let current = byId.get(folderId);
+  while (current) {
+    state.folderTreeExpanded.add(current.id);
+    current = current.parent_id ? byId.get(current.parent_id) : null;
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
@@ -748,12 +789,12 @@ async function loadProjects() {
   elements.projectSelect.disabled = false;
   elements.projectSelect.innerHTML = data.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
   renderProjectRules();
-  const savedProject = localStorage.getItem("mediaflow_project");
-  state.currentProject = data.find((project) => project.id === savedProject) || data[0] || null;
+  const recentLocation = readRecentFolderLocation();
+  state.currentProject = data.find((project) => project.id === recentLocation?.projectId) || data[0] || null;
   if (!state.currentProject) return;
   elements.projectSelect.value = state.currentProject.id;
   elements.workspaceTitle.textContent = state.currentProject.name;
-  await enterDefaultProjectFolder();
+  await enterDefaultProjectFolder(recentLocation);
 }
 
 function todayFolderNames(date = new Date()) {
@@ -777,12 +818,19 @@ function resetFolderTreeExpansion(folders = state.folderTree) {
   ].filter(Boolean));
 }
 
-async function enterDefaultProjectFolder() {
+async function enterDefaultProjectFolder(recentLocation = readRecentFolderLocation()) {
   if (!state.currentProject) return;
   const { data } = await api(`/api/accounts/${state.currentAccountId}/projects/${state.currentProject.id}/folders`);
   const folders = data.sort(assetSort);
   state.folderTree = folders;
   resetFolderTreeExpansion(folders);
+  if (recentLocation?.projectId === state.currentProject.id && folderStackIsValid(recentLocation.folderStack, folders, state.currentProject)) {
+    state.folderStack = recentLocation.folderStack;
+    expandFolderAncestors(state.folderStack[state.folderStack.length - 1]?.id, folders);
+    persistFolderLocation();
+    await loadFolder({ skipTreeReload: true });
+    return;
+  }
   const names = todayFolderNames();
   const month = folders.find((folder) => folder.parent_id === state.currentProject.root_folder_id && folder.name === names.month);
   const day = month ? folders.find((folder) => folder.parent_id === month.id && folder.name === names.day) : null;
@@ -792,7 +840,7 @@ async function enterDefaultProjectFolder() {
       { id: month.id, name: month.name },
       { id: day.id, name: day.name },
     ];
-    localStorage.setItem("mediaflow_folder_stack", JSON.stringify(state.folderStack));
+    persistFolderLocation();
     await loadFolder({ skipTreeReload: true });
     return;
   }
@@ -926,7 +974,7 @@ async function saveProjectRules(event) {
 async function enterFolder(id, name, reset = false) {
   if (reset) state.folderStack = [];
   state.folderStack.push({ id, name });
-  localStorage.setItem("mediaflow_folder_stack", JSON.stringify(state.folderStack));
+  persistFolderLocation();
   await loadFolder();
 }
 
@@ -941,7 +989,8 @@ async function goToFolder(id) {
     current = current.parent_id ? byId.get(current.parent_id) : null;
   }
   state.folderStack = stack;
-  localStorage.setItem("mediaflow_folder_stack", JSON.stringify(state.folderStack));
+  expandFolderAncestors(id);
+  persistFolderLocation();
   await loadFolder();
 }
 
@@ -955,6 +1004,7 @@ async function loadFolder({ skipTreeReload = false } = {}) {
   elements.uploadButton.disabled = false;
   const { data } = await api(`/api/accounts/${state.currentAccountId}/folders/${current.id}/children`);
   state.assets = data.sort(assetSort);
+  persistFolderLocation();
   if (skipTreeReload) renderFolderTree();
   else await loadFolderTree();
   renderAssets();
@@ -1684,7 +1734,7 @@ function handleFolderBreadcrumbClick(event) {
   const index = Number(button.dataset.index);
   if (!Number.isInteger(index) || index < 0 || index >= state.folderStack.length - 1) return;
   state.folderStack = state.folderStack.slice(0, index + 1);
-  localStorage.setItem("mediaflow_folder_stack", JSON.stringify(state.folderStack));
+  persistFolderLocation();
   loadFolder();
 }
 
