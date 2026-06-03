@@ -8241,43 +8241,69 @@ body.reviewMode .detailView {
   overflow: hidden !important;
 }
 
-/* Viewer: flex column so controls are always rendered last */
-body.reviewMode .viewer {
-  display: flex !important;
-  flex-direction: column !important;
-  grid-template-rows: unset !important;
-  overflow: hidden !important;
+/* Viewer fills reviewMain, controls pinned absolutely at bottom */
+body.reviewMode .reviewMain {
+  position: relative !important;
 }
 
-body.reviewMode .viewer video,
-body.reviewMode .viewer .imagePreview {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  max-height: none !important;
+body.reviewMode .viewer {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+
+body.reviewMode .viewer video {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 80px !important;
   width: 100% !important;
+  height: auto !important;
+  max-height: calc(100% - 80px) !important;
+  object-fit: contain !important;
+}
+
+body.reviewMode .viewer .imagePreview {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 80px !important;
+  width: 100% !important;
+  height: calc(100% - 80px) !important;
   object-fit: contain !important;
 }
 
 body.reviewMode .centerPlayButton {
   position: absolute !important;
+  top: calc(50% - 80px) !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  bottom: auto !important;
 }
 
 body.reviewMode .videoFallback {
   position: absolute !important;
-  inset: 0 0 52px !important;
+  inset: 0 80px 80px 0 !important;
 }
 
-/* Controls pinned at the bottom — never clipped, natural height */
+/* Controls always visible at the bottom of the viewer */
 body.reviewMode .playerControls {
-  flex: 0 0 auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  height: auto !important;
-  position: relative !important;
-  z-index: 10 !important;
-}
-
-body.reviewMode .videoFallback {
+  position: absolute !important;
   bottom: 0 !important;
-  inset: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: auto !important;
+  min-height: 80px !important;
+  max-height: none !important;
+  z-index: 10 !important;
+  background: rgb(7 9 13 / 96%) !important;
+  backdrop-filter: blur(12px) !important;
 }
