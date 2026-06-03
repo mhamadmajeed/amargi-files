@@ -1114,11 +1114,11 @@ async function generateVideoProxy(fileId, options = {}) {
     });
     console.log(`[export] Source downloaded, starting transcoding …`);
 
-    // Probe source width — skip any rendition whose target is >= source (no point creating same-res file)
+    // Probe source width — only skip a rendition if source is strictly smaller than target (can't upscale)
     const sourceWidth = await probeVideoWidth(localInput);
     const effectiveQualities = qualities.filter((r) => {
-      if (sourceWidth > 0 && r.maxWidth >= sourceWidth) {
-        console.log(`[export] Skipping ${r.label} — source width ${sourceWidth}px is already ≤ ${r.maxWidth}px`);
+      if (sourceWidth > 0 && r.maxWidth > sourceWidth) {
+        console.log(`[export] Skipping ${r.label} — source width ${sourceWidth}px is smaller than ${r.maxWidth}px`);
         file.exportJobs[r.quality] = "skipped";
         return false;
       }
