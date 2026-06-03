@@ -8267,11 +8267,17 @@ body.reviewMode .videoFallback {
   inset: 0 0 52px !important;
 }
 
-/* Controls pinned at the bottom — never clipped */
+/* Controls pinned at the bottom — never clipped, natural height */
 body.reviewMode .playerControls {
-  flex: 0 0 52px !important;
-  min-height: 52px !important;
-  max-height: 52px !important;
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
   position: relative !important;
   z-index: 10 !important;
+}
+
+body.reviewMode .videoFallback {
+  bottom: 0 !important;
+  inset: 0 !important;
 }
