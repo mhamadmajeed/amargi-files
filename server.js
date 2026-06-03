@@ -2214,8 +2214,35 @@ app.get("/api/accounts/:accountId/files/:fileId/playback", async (request, respo
     assertProjectAccess(request.appUser, file.projectId);
     const requestedQuality = String(request.query.quality || "1080");
     const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey || file.r2Key;
-    const url = await signedGetUrl(playbackKey, "", 60 * 30);
-    response.redirect(302, url);
+    // Proxy through server so there are no cross-origin/CORS issues with Range requests
+    const signedUrl = await signedGetUrl(playbackKey, "", 60 * 30);
+    const upstreamHeaders = {};
+    if (request.headers.range) upstreamHeaders["Range"] = request.headers.range;
+    const upstream = await fetch(signedUrl, { headers: upstreamHeaders });
+    response.status(upstream.status);
+    const contentType = upstream.headers.get("content-type") || "video/mp4";
+    const contentLength = upstream.headers.get("content-length");
+    const contentRange = upstream.headers.get("content-range");
+    const acceptRanges = upstream.headers.get("accept-ranges") || "bytes";
+    response.setHeader("Content-Type", contentType);
+    response.setHeader("Accept-Ranges", acceptRanges);
+    response.setHeader("Cache-Control", "no-store");
+    if (contentLength) response.setHeader("Content-Length", contentLength);
+    if (contentRange) response.setHeader("Content-Range", contentRange);
+    if (!upstream.body) { response.end(); return; }
+    const reader = upstream.body.getReader();
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) { response.end(); break; }
+          const canContinue = response.write(value);
+          if (!canContinue) await new Promise((r) => response.once("drain", r));
+        }
+      } catch { response.end(); }
+    };
+    request.on("close", () => reader.cancel().catch(() => {}));
+    pump();
   } catch (error) {
     next(error);
   }
@@ -2974,7 +3001,6 @@ if (require.main === module) {
   app.listen(port, () => {
     console.log(`MediaFlow running at http://localhost:${port}`);
     applyR2CorsOnStartup();
-    requeuePendingProxies();
   });
   getHttpsCredentials()
     .then((credentials) => {
