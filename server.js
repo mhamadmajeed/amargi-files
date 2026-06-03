@@ -2213,41 +2213,16 @@ app.get("/api/accounts/:accountId/files/:fileId/playback", async (request, respo
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
     const requestedQuality = String(request.query.quality || "1080");
-    // Only serve proxy/rendition files — original files may lack faststart and freeze the browser
+    // Only serve proxy/rendition files — originals may lack faststart and freeze the browser on seek
     const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey;
     if (!playbackKey) {
-      response.status(503).json({ error: "Preview not ready. Check the Download panel to generate a preview." });
+      response.status(503).json({ error: "Preview not ready. Use ↓ Download to prepare a preview." });
       return;
     }
-    // Proxy through server so there are no cross-origin/CORS issues with Range requests
-    const signedUrl = await signedGetUrl(playbackKey, "", 60 * 30);
-    const upstreamHeaders = {};
-    if (request.headers.range) upstreamHeaders["Range"] = request.headers.range;
-    const upstream = await fetch(signedUrl, { headers: upstreamHeaders });
-    response.status(upstream.status);
-    const contentType = upstream.headers.get("content-type") || "video/mp4";
-    const contentLength = upstream.headers.get("content-length");
-    const contentRange = upstream.headers.get("content-range");
-    const acceptRanges = upstream.headers.get("accept-ranges") || "bytes";
-    response.setHeader("Content-Type", contentType);
-    response.setHeader("Accept-Ranges", acceptRanges);
-    response.setHeader("Cache-Control", "no-store");
-    if (contentLength) response.setHeader("Content-Length", contentLength);
-    if (contentRange) response.setHeader("Content-Range", contentRange);
-    if (!upstream.body) { response.end(); return; }
-    const reader = upstream.body.getReader();
-    const pump = async () => {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) { response.end(); break; }
-          const canContinue = response.write(value);
-          if (!canContinue) await new Promise((r) => response.once("drain", r));
-        }
-      } catch { response.end(); }
-    };
-    request.on("close", () => reader.cancel().catch(() => {}));
-    pump();
+    // Redirect to R2 — proxy files have faststart so no seeking issues
+    // R2 CORS is configured to expose Content-Range for video playback
+    const url = await signedGetUrl(playbackKey, "", 60 * 30);
+    response.redirect(302, url);
   } catch (error) {
     next(error);
   }
