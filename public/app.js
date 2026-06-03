@@ -285,9 +285,14 @@ function showSettingsSection(section = "profile") {
   });
 }
 
-function setAlert(message = "") {
+let alertDismissTimer = null;
+function setAlert(message = "", duration = 2000) {
+  clearTimeout(alertDismissTimer);
   elements.alert.hidden = !message;
   elements.alert.textContent = message;
+  if (message && duration > 0) {
+    alertDismissTimer = setTimeout(() => { elements.alert.hidden = true; }, duration);
+  }
 }
 
 async function api(url, options = {}) {
@@ -1679,7 +1684,7 @@ async function handleFileInputChange() {
       if (files.length && targetFolderId) await uploadFiles(files, targetFolderId);
     }
   } catch (error) {
-    setAlert(error.message);
+    setAlert(error.message, 5000);
   }
 }
 
@@ -1715,7 +1720,7 @@ async function uploadFiles(files, folderId) {
     updateSelectedFileName();
     await loadFolder();
   } catch (error) {
-    setAlert(error.message);
+    setAlert(error.message, 5000);
     elements.progressLabel.textContent = "Failed";
     const activeItem = uploadItems.find((item) => item.id === state.activeUploadProgressId);
     if (activeItem) {
@@ -1970,7 +1975,7 @@ function setupFileBrowserInteractions() {
     try {
       await moveAssetToFolder(appAsset, folderCard.dataset.id);
     } catch (error) {
-      setAlert(error.message);
+      setAlert(error.message, 5000);
     } finally {
       state.draggedAsset = null;
     }
@@ -1998,7 +2003,7 @@ function setupFileBrowserInteractions() {
     try {
       await moveAssetToFolder(appAsset, row.dataset.folderId);
     } catch (error) {
-      setAlert(error.message);
+      setAlert(error.message, 5000);
     } finally {
       state.draggedAsset = null;
     }
@@ -2307,7 +2312,7 @@ async function handleDownloadMenuClick(event) {
       setAlert("Export started. You can keep working; the download will appear when it is ready.");
       await loadDownloads(state.selectedAsset);
     } catch (error) {
-      setAlert(error.message);
+      setAlert(error.message, 5000);
     }
     return;
   }
@@ -2458,7 +2463,7 @@ async function addComment(event) {
   } catch (error) {
     elements.commentInput.value = text;
     updateMentionHint();
-    setAlert(error.message);
+    setAlert(error.message, 5000);
   } finally {
     state.commentPosting = false;
     elements.commentButton.disabled = false;
