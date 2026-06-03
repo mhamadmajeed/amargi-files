@@ -2213,7 +2213,12 @@ app.get("/api/accounts/:accountId/files/:fileId/playback", async (request, respo
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
     const requestedQuality = String(request.query.quality || "1080");
-    const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey || file.r2Key;
+    // Only serve proxy/rendition files — original files may lack faststart and freeze the browser
+    const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey;
+    if (!playbackKey) {
+      response.status(503).json({ error: "Preview not ready. Check the Download panel to generate a preview." });
+      return;
+    }
     // Proxy through server so there are no cross-origin/CORS issues with Range requests
     const signedUrl = await signedGetUrl(playbackKey, "", 60 * 30);
     const upstreamHeaders = {};

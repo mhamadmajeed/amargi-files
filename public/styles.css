@@ -8060,77 +8060,32 @@ body.reviewMode .assignmentField select[multiple] option:checked {
   color: #fff;
 }
 
-/* ── Clean review layout override (wins over all earlier reviewMode rules) ── */
+/* ── Minimal overrides — targeted fixes, no layout loop ── */
 
+/* 1. Grid layout: topbar full-width row 1, player+sidebar row 2 */
 body.reviewMode .detailView {
-  display: grid !important;
   grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 360px) !important;
   grid-template-rows: 46px minmax(0, 1fr) !important;
-  height: 100%;
-  overflow: hidden;
 }
-
 body.reviewMode .reviewTopbar {
   grid-row: 1 !important;
   grid-column: 1 / -1 !important;
-  min-height: 46px !important;
-  max-height: 46px !important;
 }
-
 body.reviewMode .reviewMain {
-  display: flex !important;
-  flex-direction: column !important;
-  grid-row: 2 !important;
   grid-column: 1 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-
-body.reviewMode .reviewSide {
   grid-row: 2 !important;
+}
+body.reviewMode .reviewSide {
   grid-column: 2 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
+  grid-row: 2 !important;
 }
 
-body.reviewMode .viewer {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  display: grid !important;
-  grid-template-rows: minmax(0, 1fr) 52px !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-body.reviewMode .viewer video {
-  max-height: calc(100vh - 98px) !important;
-}
-
-body.reviewMode .commentsPanel {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-}
-
-body.reviewMode .commentsList {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  overflow-y: auto !important;
-}
-
-/* Download dropdown — always a floating popup, never inline */
+/* 2. Download menu — always a floating popup */
 body.reviewMode .downloadControl {
   position: relative !important;
   grid-column: unset !important;
   width: auto !important;
 }
-
 body.reviewMode .downloadMenu {
   position: absolute !important;
   top: calc(100% + 6px) !important;
@@ -8139,7 +8094,6 @@ body.reviewMode .downloadMenu {
   display: grid !important;
   grid-template-columns: 1fr !important;
   width: 240px !important;
-  max-width: 90vw !important;
   max-height: 320px !important;
   overflow-y: auto !important;
   gap: 2px !important;
@@ -8150,11 +8104,7 @@ body.reviewMode .downloadMenu {
   box-shadow: 0 12px 32px rgb(0 0 0 / 55%) !important;
   z-index: 100 !important;
 }
-
-body.reviewMode .downloadMenu[hidden] {
-  display: none !important;
-}
-
+body.reviewMode .downloadMenu[hidden] { display: none !important; }
 body.reviewMode .downloadMenuItem {
   display: flex !important;
   align-items: center !important;
@@ -8168,147 +8118,26 @@ body.reviewMode .downloadMenuItem {
   font-size: 0.76rem !important;
   cursor: pointer !important;
 }
+body.reviewMode .downloadMenuItem:hover:not(:disabled) { background: #141d2c !important; }
+body.reviewMode .downloadMenuItem:disabled { opacity: 0.45 !important; cursor: default !important; }
+body.reviewMode .downloadMenuItem strong { flex: 1 !important; color: #c8d3e6 !important; }
+body.reviewMode .downloadMenuItem span { color: #4d5c72 !important; font-size: 0.68rem !important; }
+body.reviewMode .downloadMenuItem em { color: #7b93ff !important; font-style: normal !important; font-weight: 700 !important; }
 
-body.reviewMode .downloadMenuItem:hover:not(:disabled) {
-  background: #141d2c !important;
+/* 3. Alert floats over player */
+body.reviewMode #alert {
+  position: fixed !important;
+  top: 16px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 500 !important;
+  width: max-content !important;
+  max-width: 90vw !important;
+  margin: 0 !important;
 }
 
-body.reviewMode .downloadMenuItem:disabled {
-  opacity: 0.45 !important;
-  cursor: default !important;
-}
-
-body.reviewMode .downloadMenuItem strong {
-  flex: 1 !important;
-  font-size: 0.76rem !important;
-  font-weight: 580 !important;
-  color: #c8d3e6 !important;
-}
-
-body.reviewMode .downloadMenuItem span {
-  color: #4d5c72 !important;
-  font-size: 0.68rem !important;
-}
-
-body.reviewMode .downloadMenuItem em {
-  color: #7b93ff !important;
-  font-size: 0.68rem !important;
-  font-style: normal !important;
-  font-weight: 700 !important;
-}
-
-/* Hide elements not used in new layout */
+/* 4. Hide unused layout elements */
 body.reviewMode .assetTools,
 body.reviewMode .reviewIconRail,
 body.reviewMode .workflowPanel,
-body.reviewMode .downloadPanel {
-  display: none !important;
-}
-
-/* ── Viewport lock: prevent alerts / anything from pushing layout down ── */
-
-body.reviewMode .workspace {
-  position: relative !important;
-  display: flex !important;
-  flex-direction: column !important;
-  height: calc(100vh - 58px) !important;
-  overflow: hidden !important;
-}
-
-/* Alert floats over the player, never displaces it */
-body.reviewMode #alert {
-  position: absolute !important;
-  top: 8px !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  z-index: 200 !important;
-  max-width: 600px !important;
-  width: max-content !important;
-  margin: 0 !important;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 50%) !important;
-}
-
-/* layout is a direct flex child of workspace — flex trick gives it remaining height */
-body.reviewMode .layout {
-  flex: 1 1 0 !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-
-/* reviewPane and detailView fill downward via 100% */
-body.reviewMode .assetPane,
-body.reviewMode .reviewPane,
-body.reviewMode .detailView {
-  height: 100% !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-
-/* reviewMain fills its detailView grid cell */
-body.reviewMode .reviewMain {
-  position: relative !important;
-  display: block !important;
-  height: 100% !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-
-/* Viewer stretches to fill reviewMain, grid rows: video | controls */
-body.reviewMode .viewer {
-  position: absolute !important;
-  inset: 0 !important;
-  display: grid !important;
-  grid-template-rows: 1fr auto !important;
-  margin: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: #000 !important;
-  overflow: hidden !important;
-}
-
-/* Video fills its grid row — object-fit handles aspect ratio */
-body.reviewMode .viewer video {
-  position: static !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-  align-self: stretch !important;
-  justify-self: stretch !important;
-}
-
-body.reviewMode .viewer .imagePreview {
-  position: static !important;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-}
-
-/* centerPlayButton and videoFallback float inside the video row */
-body.reviewMode .centerPlayButton {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  z-index: 5 !important;
-}
-
-body.reviewMode .videoFallback {
-  position: absolute !important;
-  inset: 0 !important;
-  bottom: auto !important;
-  height: calc(100% - 80px) !important;
-}
-
-/* Controls in grid row 2 — natural height, always rendered */
-body.reviewMode .playerControls {
-  position: static !important;
-  width: 100% !important;
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  z-index: 10 !important;
-}
+body.reviewMode .downloadPanel { display: none !important; }
