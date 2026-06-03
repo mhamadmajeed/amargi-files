@@ -566,7 +566,7 @@ async function configureBucketCors(origin) {
               AllowedHeaders: ["*"],
               AllowedMethods: ["GET", "HEAD", "PUT"],
               AllowedOrigins: allowedOrigins,
-              ExposeHeaders: ["ETag", "etag"],
+              ExposeHeaders: ["ETag", "etag", "Content-Range", "Content-Length", "Accept-Ranges"],
               MaxAgeSeconds: 3600,
             },
           ],
@@ -2932,7 +2932,7 @@ async function requeuePendingProxies() {
       f.r2Key && !f.deletedAt && (f.proxyStatus === "pending" || f.proxyStatus === "processing")
     );
     if (!pending.length) return;
-    // Reset processing → pending in DB so status shows correctly
+    // Reset stuck processing state
     let changed = false;
     for (const f of pending) {
       if (f.proxyStatus === "processing") { f.proxyStatus = "pending"; changed = true; }
@@ -2943,20 +2943,37 @@ async function requeuePendingProxies() {
       }
     }
     if (changed) await writeMediaDb(db);
-    console.log(`[Startup] Re-queuing proxy generation for ${pending.length} file(s)…`);
-    for (const f of pending) {
-      generateVideoProxy(f.id, { qualities: ["1080", "720", "480"], includeAudio: true }).catch((err) =>
-        console.error(`[Startup] Proxy failed for ${f.id}:`, err.message)
-      );
-    }
+    console.log(`[Startup] Processing proxies for ${pending.length} file(s) sequentially…`);
+    // Run ONE at a time to avoid freezing the server
+    (async () => {
+      for (const f of pending) {
+        try {
+          await generateVideoProxy(f.id, { qualities: ["720"], includeAudio: false });
+        } catch (err) {
+          console.error(`[Startup] Proxy failed for ${f.id}:`, err.message);
+        }
+      }
+      console.log("[Startup] Startup proxy generation complete.");
+    })();
   } catch (err) {
     console.error("[Startup] requeuePendingProxies error:", err.message);
+  }
+}
+
+async function applyR2CorsOnStartup() {
+  if (!hasR2Config()) return;
+  try {
+    await configureBucketCors(process.env.APP_URL || "");
+    console.log("[Startup] R2 CORS applied.");
+  } catch (err) {
+    console.warn("[Startup] R2 CORS update skipped:", err.message);
   }
 }
 
 if (require.main === module) {
   app.listen(port, () => {
     console.log(`MediaFlow running at http://localhost:${port}`);
+    applyR2CorsOnStartup();
     requeuePendingProxies();
   });
   getHttpsCredentials()
