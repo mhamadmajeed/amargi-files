@@ -205,11 +205,15 @@ function publicUser(user) {
 async function readUsers() {
   const data = await readJson(USERS_PATH, { users: [] }, "users.json");
   if (!Array.isArray(data.users)) data.users = [];
-  if (!data.users.some((user) => normalizeEmail(user.email) === "m.zahawy5@gmail.com")) {
-    const password = hashPassword("12345678");
+  const adminEmail = "m.zahawy5@gmail.com";
+  const adminPassword = process.env.APP_ADMIN_PASSWORD || "12345678";
+  const existingAdmin = data.users.find((user) => normalizeEmail(user.email) === adminEmail);
+  if (!existingAdmin) {
+    // Admin missing — create with current password
+    const password = hashPassword(adminPassword);
     data.users.push({
       id: crypto.randomUUID(),
-      email: "m.zahawy5@gmail.com",
+      email: adminEmail,
       name: "Main Admin",
       username: "main_admin",
       passwordSalt: password.salt,
@@ -217,6 +221,12 @@ async function readUsers() {
       role: "admin",
       createdAt: new Date().toISOString(),
     });
+    await writeUsers(data.users);
+  } else if (process.env.APP_ADMIN_PASSWORD && !verifyPassword(adminPassword, existingAdmin)) {
+    // APP_ADMIN_PASSWORD env var is set and doesn't match stored hash — force reset
+    const password = hashPassword(adminPassword);
+    existingAdmin.passwordSalt = password.salt;
+    existingAdmin.passwordHash = password.hash;
     await writeUsers(data.users);
   }
   let changed = false;
