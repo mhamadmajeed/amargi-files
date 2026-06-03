@@ -1130,7 +1130,7 @@ function renderAssets() {
     const kind = assetKind(asset);
     const created = formatDateTime(asset.created_at);
     const meta = asset.type === "folder" ? `Folder${created ? ` - ${created}` : ""}` : `${asset.mimetype || "File"} - ${formatBytes(asset.filesize || asset.size)}${created ? ` - ${created}` : ""}`;
-    const hoverVideo = kind === "video" ? `<video class="assetHoverVideo" muted playsinline preload="auto" data-preview-seconds="6" src="/api/accounts/${state.currentAccountId}/files/${asset.id}/playback"></video><span class="assetHoverProgress" aria-hidden="true"></span>` : "";
+    const hoverVideo = kind === "video" ? `<video class="assetHoverVideo" muted playsinline preload="none" data-preview-seconds="6" data-src="/api/accounts/${state.currentAccountId}/files/${asset.id}/playback"></video><span class="assetHoverProgress" aria-hidden="true"></span>` : "";
     const imagePreview = kind === "image" ? `/api/accounts/${state.currentAccountId}/files/${asset.id}/preview` : "";
     const thumbSrc = asset.thumbnail || imagePreview;
     const thumb = thumbSrc ? `<img src="${thumbSrc}" alt="">${hoverVideo}` : `<span class="assetIcon assetIcon-${kind}">${assetIcon(kind)}</span>${hoverVideo}`;
@@ -1180,6 +1180,11 @@ function setupHoverPreviews() {
       hovering = true;
       card.classList.add("isPreviewing");
       card.style.setProperty("--hover-progress", "0%");
+      // Lazy-load: set src only on first hover to avoid pre-downloading all videos
+      if (!video.src && video.dataset.src) {
+        video.src = video.dataset.src;
+        video.load();
+      }
       seekToStart();
       video.play().catch(() => {});
       cancelAnimationFrame(rafId);
