@@ -780,8 +780,8 @@ function normalizeRetentionDays(value) {
 }
 
 const VIDEO_RENDITIONS = [
-  { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23" },
-  { quality: "480", label: "480p", maxWidth: 854, crf: "26" },
+  { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23", preset: "veryfast" },
+  { quality: "480", label: "480p", maxWidth: 854, crf: "28", preset: "ultrafast" },
 ];
 const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "1080,480").split(",").map((item) => item.trim()).filter(Boolean));
 
@@ -1143,7 +1143,28 @@ async function generateVideoProxy(fileId, options = {}) {
       }
       const outputPath = path.join(tempDir, `${rendition.quality}.mp4`);
       const scale = `scale='min(${rendition.maxWidth},iw)':-2`;
-      await runFfmpeg(["-y", "-i", localInput, "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", rendition.crf, "-c:a", "aac", "-movflags", "+faststart", outputPath], `${rendition.label} MP4 export`);
+      const preset = rendition.preset || "veryfast";
+      await runFfmpeg([
+        "-y", "-threads", "0",
+        "-i", localInput,
+        "-vf", scale,
+        "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
+        "-c:a", "copy",          // copy audio stream — no re-encode, instant
+        "-movflags", "+faststart",
+        outputPath,
+      ], `${rendition.label} MP4 export`)
+        .catch(() =>
+          // fallback: re-encode audio if copy fails (incompatible source codec)
+          runFfmpeg([
+            "-y", "-threads", "0",
+            "-i", localInput,
+            "-vf", scale,
+            "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
+            outputPath,
+          ], `${rendition.label} MP4 export (re-encode audio)`)
+        );
       const renditionKey = storageKey("projects", file.projectId, "files", file.id, `proxy-${rendition.quality}.mp4`);
       await uploadFileToR2(renditionKey, outputPath, "video/mp4");
       file.renditions[rendition.quality] = { key: renditionKey, label: rendition.label, maxWidth: rendition.maxWidth, contentType: "video/mp4" };
@@ -1155,7 +1176,7 @@ async function generateVideoProxy(fileId, options = {}) {
     }
     if (includeAudio) {
       const audioPath = path.join(tempDir, "audio.mp3");
-      await runFfmpeg(["-y", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "192k", audioPath], "MP3 export");
+      await runFfmpeg(["-y", "-threads", "0", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "128k", "-q:a", "4", audioPath], "MP3 export");
       await fs.access(audioPath);
       const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
       await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
