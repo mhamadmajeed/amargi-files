@@ -2143,7 +2143,7 @@ async function selectAsset(asset) {
   elements.videoPlayer.pause();
   elements.videoPlayer.removeAttribute("src");
   elements.videoPlayer.load();
-  elements.videoFallback.textContent = "Preview is being generated. Use ↓ Download to prepare a preview, then refresh.";
+  elements.videoFallback.textContent = "Loading video…";
   elements.videoPlayer.hidden = kind !== "video";
   elements.centerPlayButton.hidden = kind !== "video";
   elements.playbackQualitySelect.hidden = kind !== "video";

@@ -2213,10 +2213,10 @@ app.get("/api/accounts/:accountId/files/:fileId/playback", async (request, respo
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
     const requestedQuality = String(request.query.quality || "1080");
-    // Only serve proxy/rendition files — originals may lack faststart and freeze the browser on seek
-    const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey;
+    // Prefer proxy/rendition files (faststart); fall back to original so video always plays
+    const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey || file.r2Key;
     if (!playbackKey) {
-      response.status(503).json({ error: "Preview not ready. Use ↓ Download to prepare a preview." });
+      response.status(503).json({ error: "File not found in storage." });
       return;
     }
     // Redirect to R2 — proxy files have faststart so no seeking issues
