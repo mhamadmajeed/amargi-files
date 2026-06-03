@@ -118,8 +118,8 @@ const elements = {
   playbackQualitySelect: $("#playbackQualitySelect"),
   reviewHomeButton: $("#reviewHomeButton"),
   reviewBackButton: $("#reviewBackButton"),
-  reviewShareButton: $("#reviewShareButton"),
-  reviewProjectTitle: $("#reviewProjectTitle"),
+  reviewShareButton: null,
+  reviewProjectTitle: null,
   reviewFileTitle: $("#reviewFileTitle"),
   closeReviewButton: $("#closeReviewButton"),
   assetTitle: $("#assetTitle"),
@@ -2130,8 +2130,7 @@ async function selectAsset(asset) {
   document.body.classList.remove("isPlayingVideo");
   elements.emptyState.hidden = true;
   elements.detailView.hidden = false;
-  elements.assetTitle.textContent = asset.name;
-  elements.reviewProjectTitle.textContent = state.currentProject?.name || "Project";
+  if (elements.assetTitle) elements.assetTitle.textContent = asset.name;
   elements.reviewFileTitle.textContent = asset.name;
   elements.assetMeta.textContent = `${asset.mimetype || "file"} - ${formatBytes(asset.filesize || asset.size)}`;
   elements.deleteButton.hidden = !canDeleteAsset(asset);
@@ -2225,7 +2224,6 @@ function closeReview() {
   elements.seekBar.disabled = false;
   elements.detailView.hidden = true;
   elements.emptyState.hidden = false;
-  if (elements.downloadPanel) elements.downloadPanel.hidden = true;
 }
 
 async function loadDownloads(asset) {
@@ -2241,15 +2239,12 @@ async function loadDownloads(asset) {
     elements.downloadMenu.innerHTML = markup;
     renderDownloadPanel(items);
     elements.downloadButton.disabled = !items.length;
-    elements.downloadButton.textContent = items.length ? `Download (${items.length})` : "No downloads";
+    elements.downloadButton.textContent = items.length ? `↓ Download` : "No downloads";
     elements.downloadMenu.hidden = true;
-    if (elements.downloadPanel) elements.downloadPanel.hidden = false;
   } catch (error) {
-    elements.downloadButton.textContent = "Downloads unavailable";
+    elements.downloadButton.textContent = "↓ Download";
     elements.downloadButton.disabled = true;
     elements.downloadMenu.hidden = true;
-    renderDownloadPanel([], error.message || "Download options could not be loaded.");
-    if (elements.downloadPanel) elements.downloadPanel.hidden = false;
   }
 }
 
@@ -2592,10 +2587,8 @@ elements.folderList.addEventListener("click", handleAssetClick);
 elements.gridViewButton.addEventListener("click", () => { state.view = "grid"; localStorage.setItem("mediaflow_view", state.view); renderAssets(); });
 elements.listViewButton.addEventListener("click", () => { state.view = "list"; localStorage.setItem("mediaflow_view", state.view); renderAssets(); });
 elements.closeReviewButton.addEventListener("click", closeReview);
-elements.reviewHomeButton.addEventListener("click", closeReview);
+elements.reviewHomeButton?.addEventListener("click", closeReview);
 elements.reviewBackButton.addEventListener("click", closeReview);
-elements.reviewProjectTitle.addEventListener("click", closeReview);
-elements.reviewShareButton.addEventListener("click", shareSelectedAsset);
 elements.centerPlayButton.addEventListener("click", () => { elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause(); });
 elements.videoPlayer.addEventListener("click", () => { elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause(); });
 elements.playPauseButton.addEventListener("click", () => { elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause(); });

@@ -4134,8 +4134,25 @@ body.reviewMode .reviewPane {
 }
 
 body.reviewMode .detailView {
-  grid-template-columns: minmax(0, 1fr) clamp(340px, 24vw, 430px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 380px);
+  grid-template-rows: 46px minmax(0, 1fr);
   background: #07090d;
+}
+
+body.reviewMode .reviewTopbar {
+  grid-row: 1;
+  grid-column: 1 / -1;
+}
+
+body.reviewMode .reviewMain {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+body.reviewMode .reviewSide {
+  grid-row: 2;
+  grid-column: 2;
 }
 
 body.reviewMode .reviewMain {
@@ -5846,25 +5863,94 @@ body.reviewMode .reviewIconRail {
 }
 
 body.reviewMode .reviewTopbar {
+  grid-column: 1 / -1;
   min-width: 0;
-  border-bottom-color: #171d29;
+  min-height: 46px;
+  border-bottom-color: #13192400;
   border-radius: 0;
-  background: #111620;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 2%);
+  background: #0c0f15;
+  box-shadow: 0 1px 0 #171d26;
+  padding: 0 12px;
+  gap: 10px;
 }
 
 body.reviewMode .reviewBreadcrumb {
   min-width: 0;
-}
-
-body.reviewMode .reviewBreadcrumb strong,
-body.reviewMode #reviewFileTitle {
+  gap: 5px;
   font-size: 0.78rem;
-  line-height: 1;
 }
 
-body.reviewMode .reviewTopActions {
-  min-width: 0;
+body.reviewMode #closeReviewButton {
+  color: #6b7a94;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+body.reviewMode #closeReviewButton:hover {
+  color: #c0c8da;
+}
+
+body.reviewMode #reviewFileTitle {
+  font-size: 0.82rem;
+  font-weight: 660;
+  color: #d0d7e8;
+  max-width: 240px;
+}
+
+.reviewMeta {
+  color: #404d60;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.reviewTopActions {
+  gap: 6px;
+}
+
+.reviewActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #1c2535;
+  border-radius: 7px;
+  background: #111720;
+  color: #b8c2d6;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reviewActionButton:hover {
+  border-color: #2a3650;
+  background: #161f2e;
+  color: #e0e6f4;
+}
+
+.reviewActionButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.reviewActionDanger {
+  border-color: rgb(220 50 70 / 20%);
+  background: rgb(220 50 70 / 8%);
+  color: #f87171;
+}
+
+.reviewActionDanger:hover {
+  border-color: rgb(220 50 70 / 40%);
+  background: rgb(220 50 70 / 14%);
+  color: #fca5a5;
 }
 
 body.reviewMode .reviewVersionControl,
@@ -5877,15 +5963,20 @@ body.reviewMode .reviewMain {
   min-width: 0;
   min-height: 0;
   background: #000;
+  gap: 0;
 }
 
 body.reviewMode .viewer {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 78px;
+  grid-template-rows: minmax(0, 1fr) 56px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
   min-width: 0;
   min-height: 0;
   background: #000;
+  box-shadow: none;
 }
 
 body.reviewMode .viewer video {
@@ -5894,7 +5985,7 @@ body.reviewMode .viewer video {
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: calc(100vh - 134px);
+  max-height: calc(100vh - 102px);
   object-fit: contain;
   background: #000;
 }

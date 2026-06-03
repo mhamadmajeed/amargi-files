@@ -449,12 +449,19 @@
                   <button id="reviewBackButton" type="button" aria-label="Back to folders">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                   </button>
-                  <button id="reviewProjectTitle" type="button">Project</button>
+                  <button id="closeReviewButton" type="button">Folders</button>
                   <span>/</span>
                   <button id="reviewFileTitle" type="button">Untitled</button>
+                  <span id="assetMeta" class="reviewMeta"></span>
                 </div>
                 <div class="reviewTopActions">
-                  <button id="reviewShareButton" class="reviewShareButton" type="button">Share</button>
+                  <div class="downloadControl">
+                    <button id="downloadButton" class="reviewActionButton" type="button" disabled>↓ Download</button>
+                    <div id="downloadMenu" class="downloadMenu" hidden></div>
+                  </div>
+                  <button id="openFrameButton" class="reviewActionButton" type="button">Share</button>
+                  <button id="renameButton" class="reviewActionButton" type="button">Rename</button>
+                  <button id="deleteButton" class="reviewActionButton reviewActionDanger" type="button">Delete</button>
                 </div>
               </header>
               <div class="reviewMain">
@@ -480,58 +487,26 @@
                     </select>
                   </div>
                 </div>
-                <div class="assetTools">
-                  <div class="assetToolsLeft">
-                    <button id="closeReviewButton" class="ghostButton iconTextButton" type="button">
-                      <span class="buttonIcon" aria-hidden="true">&larr;</span>
-                      Folders
-                    </button>
-                    <div class="assetIdentity">
-                      <h2 id="assetTitle">Untitled</h2>
-                      <span id="assetMeta" class="muted"></span>
-                    </div>
-                  </div>
-                  <div class="toolButtons">
-                    <button id="openFrameButton" class="ghostButton" type="button">Share</button>
-                    <div class="downloadControl">
-                      <button id="downloadButton" class="downloadSelect" type="button" disabled>↓ Download</button>
-                      <div id="downloadMenu" class="downloadMenu" hidden></div>
-                    </div>
-                    <button id="renameButton" class="ghostButton" type="button">Rename</button>
-                    <button id="deleteButton" class="dangerButton" type="button">Delete</button>
-                  </div>
-                </div>
-                <div id="tagEditor" class="tagEditor" hidden>
-                  <div id="tagList" class="tagList"></div>
-                  <form id="tagForm" class="tagForm">
-                    <input id="tagInput" type="text" autocomplete="off" placeholder="Add tag" />
-                    <button class="ghostButton" type="submit">Add</button>
-                  </form>
-                </div>
               </div>
 
-              <div id="downloadPanel" class="downloadPanel" hidden>
-                <div class="downloadPanelOptions"></div>
+              <!-- hidden workflow fields kept for JS compatibility -->
+              <div hidden aria-hidden="true">
+                <h2 id="assetTitle"></h2>
+                <select id="assigneeSelect" multiple><option value="">Unassigned</option></select>
+                <select id="statusSelect">
+                  <option value="work_in_progress">Work in progress</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="approved">Approved</option>
+                  <option value="published">Published</option>
+                </select>
+                <div id="tagEditor" class="tagEditor">
+                  <div id="tagList"></div>
+                  <form id="tagForm"><input id="tagInput" type="text" /><button type="submit">Add</button></form>
+                </div>
+                <div id="downloadPanel"><div class="downloadPanelOptions"></div></div>
               </div>
 
               <aside class="reviewSide">
-                <section class="workflowPanel">
-                  <label class="reviewField assignmentField">
-                    <span>Assigned</span>
-                    <select id="assigneeSelect" multiple size="4">
-                      <option value="">Unassigned</option>
-                    </select>
-                  </label>
-                  <label class="reviewField statusField">
-                    <span>Status</span>
-                    <select id="statusSelect">
-                      <option value="work_in_progress">Work in progress</option>
-                      <option value="rejected">Rejected</option>
-                      <option value="approved">Approved</option>
-                      <option value="published">Published</option>
-                    </select>
-                  </label>
-                </section>
                 <section class="commentsPanel">
                   <div class="paneHeader">
                     <strong>Comments</strong>
