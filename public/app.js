@@ -171,6 +171,7 @@ const state = {
   mentionQuery: "",
   commentPosting: false,
   destinationPicker: null,
+  activeUploadProgressId: "",
 };
 
 const RECENT_LOCATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -1632,12 +1633,28 @@ async function uploadFiles(files, folderId) {
   if (!files?.length || !folderId) return;
   elements.uploadButton.disabled = true;
   elements.progressLabel.textContent = "Preparing";
+  const uploadItems = files.map((file, index) => ({
+    id: `upload-${Date.now()}-${index}`,
+    name: file.name,
+    size: file.size,
+    status: "Waiting",
+    progress: 0,
+  }));
+  renderUploadQueue(uploadItems);
   try {
-    elements.uploadQueue.innerHTML = files.length > 1 ? `<div class="uploadQueueItem">Uploading ${files.length} files...</div>` : "";
     for (const [index, file] of files.entries()) {
+      state.activeUploadProgressId = uploadItems[index].id;
+      uploadItems[index].status = "Uploading";
+      uploadItems[index].progress = 0;
+      renderUploadQueue(uploadItems);
       elements.progressLabel.textContent = files.length > 1 ? `File ${index + 1} of ${files.length}` : "Preparing";
       const data = file.size >= 100 * 1024 * 1024 ? await uploadMultipartFile(folderId, file) : await uploadSingleFile(folderId, file);
+      uploadItems[index].status = "Processing preview";
+      uploadItems[index].progress = 100;
+      renderUploadQueue(uploadItems);
       await uploadVideoThumbnail(data.id, file).catch(() => {});
+      uploadItems[index].status = "Uploaded";
+      renderUploadQueue(uploadItems);
     }
     elements.progressLabel.textContent = files.length > 1 ? "All uploaded" : "Uploaded";
     elements.fileInput.value = "";
@@ -1646,7 +1663,13 @@ async function uploadFiles(files, folderId) {
   } catch (error) {
     setAlert(error.message);
     elements.progressLabel.textContent = "Failed";
+    const activeItem = uploadItems.find((item) => item.id === state.activeUploadProgressId);
+    if (activeItem) {
+      activeItem.status = "Failed";
+      renderUploadQueue(uploadItems);
+    }
   } finally {
+    state.activeUploadProgressId = "";
     elements.uploadButton.disabled = false;
     setTimeout(() => {
       elements.progressBar.value = 0;
@@ -1655,6 +1678,21 @@ async function uploadFiles(files, folderId) {
       elements.uploadQueue.innerHTML = "";
     }, 1500);
   }
+}
+
+function renderUploadQueue(items = []) {
+  elements.uploadQueue.innerHTML = items.map((item) => `
+    <article class="uploadQueueItem ${item.status === "Failed" ? "failed" : ""} ${item.status === "Uploaded" ? "done" : ""}" data-upload-id="${escapeHtml(item.id)}">
+      <div>
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${escapeHtml(formatBytes(item.size))} - ${escapeHtml(item.status)}</span>
+      </div>
+      <div class="uploadQueueProgress" aria-label="Upload progress">
+        <span style="width:${Math.max(0, Math.min(100, Number(item.progress) || 0))}%"></span>
+      </div>
+      <b>${Math.round(Math.max(0, Math.min(100, Number(item.progress) || 0)))}%</b>
+    </article>
+  `).join("");
 }
 
 function isVideoFile(file) {
@@ -1720,6 +1758,13 @@ function setUploadProgress(loaded, total, label = "Uploading") {
   elements.progressBar.value = pct;
   elements.progressPercent.textContent = `${pct}%`;
   elements.progressLabel.textContent = label;
+  if (state.activeUploadProgressId) {
+    const item = Array.from(elements.uploadQueue.querySelectorAll(".uploadQueueItem")).find((row) => row.dataset.uploadId === state.activeUploadProgressId);
+    if (item) {
+      item.querySelector(".uploadQueueProgress span").style.width = `${pct}%`;
+      item.querySelector("b").textContent = `${pct}%`;
+    }
+  }
 }
 
 function updateSelectedFileName() {
@@ -2023,7 +2068,8 @@ async function loadDownloads(asset) {
     </button>
   `).join("");
   elements.downloadButton.disabled = !data.length;
-  elements.downloadButton.textContent = `Download (${data.length})`;
+  elements.downloadButton.textContent = `Download options (${data.length})`;
+  elements.downloadMenu.hidden = false;
 }
 
 function toggleDownloadMenu(force) {
