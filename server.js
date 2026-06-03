@@ -1873,6 +1873,57 @@ app.patch("/api/accounts/:accountId/folders/:folderId", async (request, response
   }
 });
 
+app.post("/api/accounts/:accountId/folders/:folderId/move", async (request, response, next) => {
+  try {
+    const targetFolderId = String(request.body?.folderId || "").trim();
+    if (!targetFolderId) {
+      response.status(400).json({ error: "Target folder is required." });
+      return;
+    }
+    const db = await readMediaDb();
+    const folder = getFolder(db, request.params.folderId);
+    const targetFolder = getFolder(db, targetFolderId);
+    assertProjectAccess(request.appUser, folder.projectId);
+    assertProjectAccess(request.appUser, targetFolder.projectId);
+    if (folder.system === "project_root") {
+      response.status(400).json({ error: "Cannot move a project root folder." });
+      return;
+    }
+    if (folder.projectId !== targetFolder.projectId) {
+      response.status(400).json({ error: "Folders can only be moved inside the same project." });
+      return;
+    }
+    assertProjectRuleAllowed(request.appUser, getProject(db, targetFolder.projectId), "membersCanUpload", "Members cannot move folders in this project.");
+    const descendantIds = new Set([folder.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const item of db.folders) {
+        if (item.parentId && descendantIds.has(item.parentId) && !descendantIds.has(item.id)) {
+          descendantIds.add(item.id);
+          changed = true;
+        }
+      }
+    }
+    if (descendantIds.has(targetFolder.id)) {
+      response.status(400).json({ error: "Cannot move a folder inside itself." });
+      return;
+    }
+    if (folder.parentId === targetFolder.id) {
+      response.json({ data: toApiFolder(folder, db) });
+      return;
+    }
+    const previousParentId = folder.parentId;
+    folder.parentId = targetFolder.id;
+    folder.updatedAt = new Date().toISOString();
+    await writeMediaDb(db);
+    await recordActivity(request, "folder.moved", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId }, { previousParentId, parentId: folder.parentId });
+    response.json({ data: toApiFolder(folder, db) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete("/api/accounts/:accountId/folders/:folderId", async (request, response, next) => {
   try {
     const db = await readMediaDb();
@@ -2146,6 +2197,10 @@ app.get("/api/accounts/:accountId/files/:fileId/preview", async (request, respon
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
+    if (String(file.mimeType || "").startsWith("image/") && request.query.metadata !== "1") {
+      response.redirect(302, await signedGetUrl(file.r2Key, "", 60 * 30));
+      return;
+    }
     response.json({
       data: {
         id: file.id,

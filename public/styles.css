@@ -3795,6 +3795,22 @@ body.reviewMode .reviewPane {
   background: rgb(58 142 255 / 18%);
 }
 
+.assetCard.isDraggingAsset {
+  opacity: 0.54;
+  transform: scale(0.985);
+}
+
+.folderTreeItem.isDropTarget {
+  border-color: rgb(96 165 250 / 72%);
+  background: rgb(96 165 250 / 16%);
+  color: #f5f8ff;
+  box-shadow: inset 0 0 0 1px rgb(96 165 250 / 28%);
+}
+
+.folderTreeItem.isDropTarget .folderTreeIcon {
+  color: #8ebcff;
+}
+
 .fileContextMenu {
   position: fixed;
   z-index: 80;
@@ -6803,6 +6819,186 @@ body.reviewMode .downloadMenuItem strong {
 body.reviewMode .downloadMenuItem span {
   color: #9ba8bb;
   font-size: 0.68rem;
+}
+
+.downloadPanel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #222c3e;
+  border-radius: 14px;
+  background: #0c121b;
+  padding: 12px;
+}
+
+.downloadPanelHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.downloadPanelHeader strong {
+  color: #f4f7fb;
+  font-size: 0.86rem;
+}
+
+.downloadPanelHeader span {
+  color: #8f9bae;
+  font-size: 0.68rem;
+  text-align: right;
+}
+
+.downloadPanelOptions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.downloadPanelOptions .downloadMenuItem {
+  flex: 0 0 168px;
+  position: relative;
+  min-height: 58px;
+  border: 1px solid #2a354a;
+  border-radius: 12px;
+  background: #121925;
+  padding: 10px 12px;
+}
+
+.downloadPanelOptions .downloadMenuItem:not(:disabled)::after {
+  content: "Download";
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: #8ea2ff;
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.downloadPanelOptions .downloadMenuItem:hover:not(:disabled) {
+  border-color: rgb(111 99 255 / 62%);
+  background: #172031;
+}
+
+.downloadPanelEmpty {
+  display: block;
+  border: 1px dashed #2a354a;
+  border-radius: 12px;
+  color: #98a4b7;
+  padding: 14px;
+  text-align: center;
+}
+
+body.reviewMode .detailView {
+  grid-template-rows: 56px minmax(0, 1fr) auto;
+}
+
+body.reviewMode .reviewSide {
+  grid-row: 2 / 4;
+}
+
+body.reviewMode .reviewMain {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+body.reviewMode .assetTools {
+  grid-column: 2 / 3;
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 14px;
+  min-height: 0;
+  margin: 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  border-color: #171d29;
+  background: #090d14;
+  padding: 12px 16px 14px;
+}
+
+body.reviewMode .assetToolsLeft {
+  min-width: 0;
+}
+
+body.reviewMode .workflowControls {
+  display: none;
+}
+
+body.reviewMode .toolButtons {
+  align-self: start;
+}
+
+body.reviewMode .downloadPanel {
+  grid-column: 1 / -1;
+  border-color: #202a3c;
+  background: #0d131e;
+}
+
+body.reviewMode .reviewMain {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+body.reviewMode .viewer {
+  flex: 1 1 auto;
+  min-height: 220px;
+  height: auto;
+}
+
+body.reviewMode .reviewMain > .downloadPanel {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0 12px 10px;
+  padding: 10px;
+}
+
+body.reviewMode .reviewMain > .assetTools {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  body.reviewMode .detailView {
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-rows: 56px minmax(48vh, 1fr) auto minmax(320px, 1fr);
+  }
+
+  body.reviewMode .reviewMain {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body.reviewMode .assetTools {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  body.reviewMode .reviewSide {
+    grid-column: 2;
+    grid-row: 4;
+  }
+}
+
+.imagePreview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #050609;
+}
+
+.imagePreview[hidden] {
+  display: none;
+}
+
+body.reviewMode .viewer:has(.imagePreview:not([hidden])) {
+  display: grid;
+  place-items: center;
 }
 
 .tagEditor {

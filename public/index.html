@@ -460,6 +460,7 @@
               <div class="reviewMain">
                 <div class="viewer">
                   <video id="videoPlayer" playsinline></video>
+                  <img id="imagePreview" class="imagePreview" alt="" hidden />
                   <button id="centerPlayButton" class="centerPlayButton" type="button" aria-label="Play video">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
                   </button>
@@ -479,6 +480,15 @@
                     </select>
                   </div>
                 </div>
+                <section id="downloadPanel" class="downloadPanel" aria-label="Download options">
+                  <div class="downloadPanelHeader">
+                    <strong>Downloads</strong>
+                    <span>Original, smaller MP4 files, and MP3 when ready</span>
+                  </div>
+                  <div class="downloadPanelOptions">
+                    <span class="downloadPanelEmpty">Open a file to load download options.</span>
+                  </div>
+                </section>
 
                 <div class="assetTools">
                   <div class="assetToolsLeft">

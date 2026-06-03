@@ -107,6 +107,7 @@ const elements = {
   emptyState: $("#emptyState"),
   detailView: $("#detailView"),
   videoPlayer: $("#videoPlayer"),
+  imagePreview: $("#imagePreview"),
   centerPlayButton: $("#centerPlayButton"),
   videoFallback: $("#videoFallback"),
   playPauseButton: $("#playPauseButton"),
@@ -132,6 +133,7 @@ const elements = {
   openFrameButton: $("#openFrameButton"),
   downloadButton: $("#downloadButton"),
   downloadMenu: $("#downloadMenu"),
+  downloadPanel: $("#downloadPanel"),
   downloadSelect: $("#downloadButton"),
   renameButton: $("#renameButton"),
   deleteButton: $("#deleteButton"),
@@ -172,6 +174,7 @@ const state = {
   commentPosting: false,
   destinationPicker: null,
   activeUploadProgressId: "",
+  draggedAsset: null,
 };
 
 const RECENT_LOCATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -1054,6 +1057,21 @@ function renderFolderTree() {
   elements.folderTree.innerHTML = roots.map((folder) => renderNode(folder)).join("") || `<p class="folderTreeEmpty">No folders yet</p>`;
 }
 
+function getFolderDescendantIds(folderId, folders = state.folderTree) {
+  const descendantIds = new Set([folderId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const folder of folders) {
+      if (folder.parent_id && descendantIds.has(folder.parent_id) && !descendantIds.has(folder.id)) {
+        descendantIds.add(folder.id);
+        changed = true;
+      }
+    }
+  }
+  return descendantIds;
+}
+
 function renderBreadcrumbs() {
   if (!elements.folderBreadcrumbs) return;
   elements.folderBreadcrumbs.innerHTML = state.folderStack.map((folder, index) => {
@@ -1112,10 +1130,12 @@ function renderAssets() {
     const created = formatDateTime(asset.created_at);
     const meta = asset.type === "folder" ? `Folder${created ? ` - ${created}` : ""}` : `${asset.mimetype || "File"} - ${formatBytes(asset.filesize || asset.size)}${created ? ` - ${created}` : ""}`;
     const hoverVideo = kind === "video" ? `<video class="assetHoverVideo" muted playsinline preload="auto" data-preview-seconds="6" src="/api/accounts/${state.currentAccountId}/files/${asset.id}/playback"></video><span class="assetHoverProgress" aria-hidden="true"></span>` : "";
-    const thumb = asset.thumbnail ? `<img src="${asset.thumbnail}" alt="">${hoverVideo}` : `<span class="assetIcon assetIcon-${kind}">${assetIcon(kind)}</span>${hoverVideo}`;
+    const imagePreview = kind === "image" ? `/api/accounts/${state.currentAccountId}/files/${asset.id}/preview` : "";
+    const thumbSrc = asset.thumbnail || imagePreview;
+    const thumb = thumbSrc ? `<img src="${thumbSrc}" alt="">${hoverVideo}` : `<span class="assetIcon assetIcon-${kind}">${assetIcon(kind)}</span>${hoverVideo}`;
     const deleteButton = canDeleteAsset(asset) ? `<button class="deleteAsset iconMiniButton deleteFolderButton" type="button" aria-label="Delete ${escapeHtml(asset.name)}" title="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg></button>` : "";
     return `<article class="assetCard assetCard-${kind}" data-id="${escapeHtml(asset.id)}" data-type="${asset.type}" draggable="true">
-      <button class="assetOpen" type="button" title="${escapeHtml(asset.name)}">
+      <button class="assetOpen" type="button" title="${escapeHtml(asset.name)}" draggable="true">
         <div class="assetThumb assetThumb-${kind}">${thumb}</div>
         <div class="assetInfo"><strong>${escapeHtml(asset.name)}</strong><span>${escapeHtml(meta)}</span></div>
         <span class="assetKindPill assetKindPill-${kind}">${escapeHtml(kind)}</span>
@@ -1531,6 +1551,34 @@ async function moveFile(asset, { archive = false } = {}) {
   setAlert(`Moved "${asset.name}" to ${destination.path}.`);
 }
 
+async function moveAssetToFolder(asset, targetFolderId) {
+  if (!asset || !targetFolderId) return;
+  if (asset.type === "folder") {
+    if (asset.id === targetFolderId || getFolderDescendantIds(asset.id).has(targetFolderId)) {
+      setAlert("A folder cannot be moved inside itself.");
+      return;
+    }
+    if (asset.parent_id === targetFolderId) return;
+    await api(`/api/accounts/${state.currentAccountId}/folders/${asset.id}/move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: targetFolderId }),
+    });
+  } else {
+    if (asset.parent_id === targetFolderId) return;
+    await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: targetFolderId }),
+    });
+  }
+  if (state.selectedAsset?.id === asset.id && asset.type !== "folder") {
+    state.selectedAsset = { ...state.selectedAsset, parent_id: targetFolderId };
+  }
+  await loadFolder();
+  setAlert(`Moved "${asset.name}" into the selected folder.`);
+}
+
 async function copyFile(asset, { archive = false } = {}) {
   if (asset.type !== "file") return;
   const targetProject = archive ? archiveProject() : state.currentProject;
@@ -1867,6 +1915,7 @@ function setupDropUpload() {
     if (!depth) setActive(false);
   });
   pane.addEventListener("drop", (event) => {
+    if (!event.dataTransfer?.files?.length || state.draggedAsset || event.dataTransfer?.types?.includes("application/x-amargi-asset-id")) return;
     if (!event.dataTransfer?.files?.length) return;
     event.preventDefault();
     depth = 0;
@@ -1887,19 +1936,106 @@ function setupFileBrowserInteractions() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideContextMenu();
   });
+  elements.folderList.addEventListener("dragstart", handleAssetDragStart);
+  elements.folderList.addEventListener("dragend", handleAssetDragEnd);
   elements.folderList.addEventListener("dragover", (event) => {
+    const appAsset = draggedAppAsset(event);
     const folderCard = event.target.closest(".assetCard[data-type=\"folder\"]");
     elements.folderList.querySelectorAll(".isDropTarget").forEach((card) => {
       if (card !== folderCard) card.classList.remove("isDropTarget");
     });
     if (folderCard && event.dataTransfer?.types?.includes("Files")) folderCard.classList.add("isDropTarget");
+    if (folderCard && appAsset && validAssetDropTarget(appAsset, folderCard.dataset.id)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      folderCard.classList.add("isDropTarget");
+    }
   });
   elements.folderList.addEventListener("dragleave", (event) => {
     event.target.closest(".assetCard")?.classList.remove("isDropTarget");
   });
-  elements.folderList.addEventListener("drop", () => {
-    elements.folderList.querySelectorAll(".isDropTarget").forEach((card) => card.classList.remove("isDropTarget"));
+  elements.folderList.addEventListener("drop", async (event) => {
+    const folderCard = event.target.closest(".assetCard[data-type=\"folder\"]");
+    const appAsset = draggedAppAsset(event);
+    if (!folderCard || !appAsset || !validAssetDropTarget(appAsset, folderCard.dataset.id)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearAssetDropTargets();
+    try {
+      await moveAssetToFolder(appAsset, folderCard.dataset.id);
+    } catch (error) {
+      setAlert(error.message);
+    } finally {
+      state.draggedAsset = null;
+    }
+  }, true);
+  elements.folderTree.addEventListener("dragover", (event) => {
+    const appAsset = draggedAppAsset(event);
+    const row = event.target.closest(".folderTreeItem[data-folder-id]");
+    elements.folderTree.querySelectorAll(".isDropTarget").forEach((item) => {
+      if (item !== row) item.classList.remove("isDropTarget");
+    });
+    if (!row || !appAsset || !validAssetDropTarget(appAsset, row.dataset.folderId)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    row.classList.add("isDropTarget");
   });
+  elements.folderTree.addEventListener("dragleave", (event) => {
+    event.target.closest(".folderTreeItem")?.classList.remove("isDropTarget");
+  });
+  elements.folderTree.addEventListener("drop", async (event) => {
+    const row = event.target.closest(".folderTreeItem[data-folder-id]");
+    const appAsset = draggedAppAsset(event);
+    clearAssetDropTargets();
+    if (!row || !appAsset || !validAssetDropTarget(appAsset, row.dataset.folderId)) return;
+    event.preventDefault();
+    try {
+      await moveAssetToFolder(appAsset, row.dataset.folderId);
+    } catch (error) {
+      setAlert(error.message);
+    } finally {
+      state.draggedAsset = null;
+    }
+  });
+}
+
+function handleAssetDragStart(event) {
+  if (event.target.closest(".assetCardActions, .assetCardActions button")) {
+    event.preventDefault();
+    return;
+  }
+  const card = event.target.closest(".assetCard[data-id]");
+  const asset = state.assets.find((item) => item.id === card?.dataset.id);
+  if (!card || !asset) return;
+  state.draggedAsset = asset;
+  card.classList.add("isDraggingAsset");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("application/x-amargi-asset-id", asset.id);
+  event.dataTransfer.setData("application/x-amargi-asset-type", asset.type);
+  event.dataTransfer.setData("text/plain", asset.name || "Asset");
+}
+
+function handleAssetDragEnd() {
+  state.draggedAsset = null;
+  clearAssetDropTargets();
+}
+
+function draggedAppAsset(event) {
+  const id = event.dataTransfer?.getData("application/x-amargi-asset-id") || state.draggedAsset?.id || "";
+  return state.assets.find((asset) => asset.id === id) || state.draggedAsset;
+}
+
+function validAssetDropTarget(asset, folderId) {
+  if (!asset || !folderId) return false;
+  if (asset.type !== "folder") return asset.parent_id !== folderId;
+  return asset.id !== folderId && asset.parent_id !== folderId && !getFolderDescendantIds(asset.id).has(folderId);
+}
+
+function clearAssetDropTargets() {
+  elements.folderList.querySelectorAll(".isDropTarget, .isDraggingAsset").forEach((card) => {
+    card.classList.remove("isDropTarget", "isDraggingAsset");
+  });
+  elements.folderTree?.querySelectorAll(".isDropTarget").forEach((item) => item.classList.remove("isDropTarget"));
 }
 
 function putBlob(url, blob, contentType, onProgress) {
@@ -1989,6 +2125,7 @@ async function uploadMultipartFile(folderId, file) {
 
 async function selectAsset(asset) {
   state.selectedAsset = asset;
+  const kind = assetKind(asset);
   document.body.classList.add("reviewMode");
   document.body.classList.remove("isPlayingVideo");
   elements.emptyState.hidden = true;
@@ -1999,10 +2136,38 @@ async function selectAsset(asset) {
   elements.assetMeta.textContent = `${asset.mimetype || "file"} - ${formatBytes(asset.filesize || asset.size)}`;
   elements.deleteButton.hidden = !canDeleteAsset(asset);
   renderTags(asset);
-  const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
-  elements.videoPlayer.src = playbackUrl;
-  elements.videoFallback.hidden = false;
+  elements.videoPlayer.pause();
+  elements.videoPlayer.removeAttribute("src");
   elements.videoPlayer.load();
+  elements.videoFallback.textContent = "No playable preview URL was returned for this file.";
+  elements.videoPlayer.hidden = kind !== "video";
+  elements.centerPlayButton.hidden = kind !== "video";
+  elements.playbackQualitySelect.hidden = kind !== "video";
+  elements.playPauseButton.disabled = kind !== "video";
+  elements.seekBar.disabled = kind !== "video";
+  elements.imagePreview.hidden = kind !== "image";
+  elements.imagePreview.removeAttribute("src");
+  if (kind === "video") {
+    const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
+    elements.videoPlayer.src = playbackUrl;
+    elements.videoFallback.hidden = false;
+    elements.videoPlayer.load();
+  } else if (kind === "image") {
+    elements.imagePreview.onload = () => { elements.videoFallback.hidden = true; };
+    elements.imagePreview.onerror = () => {
+      elements.imagePreview.hidden = true;
+      elements.videoFallback.textContent = "Image preview could not be loaded. Use the download options below.";
+      elements.videoFallback.hidden = false;
+    };
+    elements.imagePreview.src = `/api/accounts/${state.currentAccountId}/files/${asset.id}/preview`;
+    elements.videoFallback.hidden = true;
+    elements.currentTimeLabel.textContent = "00:00";
+    elements.durationLabel.textContent = "Image";
+    elements.seekBar.value = 0;
+  } else {
+    elements.videoFallback.textContent = "Preview is not available for this file type. Use the download options below.";
+    elements.videoFallback.hidden = false;
+  }
   await Promise.all([loadDownloads(asset), loadComments(asset), loadWorkflow(asset)]);
 }
 
@@ -2051,6 +2216,13 @@ function closeReview() {
   elements.videoPlayer.pause();
   elements.videoPlayer.removeAttribute("src");
   elements.videoPlayer.load();
+  elements.videoPlayer.hidden = false;
+  elements.imagePreview.hidden = true;
+  elements.imagePreview.removeAttribute("src");
+  elements.centerPlayButton.hidden = false;
+  elements.playbackQualitySelect.hidden = false;
+  elements.playPauseButton.disabled = false;
+  elements.seekBar.disabled = false;
   elements.detailView.hidden = true;
   elements.emptyState.hidden = false;
 }
@@ -2060,16 +2232,40 @@ async function loadDownloads(asset) {
   elements.downloadButton.textContent = "Loading...";
   elements.downloadMenu.hidden = true;
   elements.downloadMenu.innerHTML = "";
-  const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/downloads`);
-  elements.downloadMenu.innerHTML = data.map((item) => `
-    <button class="downloadMenuItem" type="button" data-url="${escapeHtml(item.url || "")}" ${item.pending || !item.url ? "disabled" : ""}>
+  renderDownloadPanel([], "Loading download options...");
+  try {
+    const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/downloads`);
+    const items = Array.isArray(data) ? data : [];
+    const markup = items.map(downloadOptionMarkup).join("");
+    elements.downloadMenu.innerHTML = markup;
+    renderDownloadPanel(items);
+    elements.downloadButton.disabled = !items.length;
+    elements.downloadButton.textContent = `Download options (${items.length})`;
+    elements.downloadMenu.hidden = false;
+  } catch (error) {
+    elements.downloadButton.textContent = "Downloads unavailable";
+    renderDownloadPanel([], error.message || "Download options could not be loaded.");
+  }
+}
+
+function downloadOptionMarkup(item) {
+  return `
+    <button class="downloadMenuItem ${item.pending || !item.url ? "pending" : ""}" type="button" data-url="${escapeHtml(item.url || "")}" ${item.pending || !item.url ? "disabled" : ""}>
       <strong>${escapeHtml(item.label)}</strong>
       <span>${escapeHtml(item.detail || "")}</span>
     </button>
-  `).join("");
-  elements.downloadButton.disabled = !data.length;
-  elements.downloadButton.textContent = `Download options (${data.length})`;
-  elements.downloadMenu.hidden = false;
+  `;
+}
+
+function renderDownloadPanel(items = [], emptyText = "No download options are available yet.") {
+  if (!elements.downloadPanel) return;
+  const options = elements.downloadPanel.querySelector(".downloadPanelOptions");
+  if (!options) return;
+  if (!items.length) {
+    options.innerHTML = `<span class="downloadPanelEmpty">${escapeHtml(emptyText)}</span>`;
+    return;
+  }
+  options.innerHTML = items.map(downloadOptionMarkup).join("");
 }
 
 function toggleDownloadMenu(force) {
@@ -2393,6 +2589,7 @@ elements.seekBar.addEventListener("input", () => {
 elements.playbackQualitySelect.addEventListener("change", () => { if (state.selectedAsset) selectAsset(state.selectedAsset); });
 elements.downloadButton.addEventListener("click", () => toggleDownloadMenu());
 elements.downloadMenu.addEventListener("click", handleDownloadMenuClick);
+elements.downloadPanel?.addEventListener("click", handleDownloadMenuClick);
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".downloadControl")) toggleDownloadMenu(false);
 });
