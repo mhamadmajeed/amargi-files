@@ -8079,11 +8079,30 @@ body.reviewMode .reviewMain {
   min-height: 0 !important;
 }
 
-/* Viewer: video fills 1fr, controls row is auto (never clipped) */
+/* Viewer: fills full reviewMain width and height, zero margins */
 body.reviewMode .viewer {
   display: grid !important;
   grid-template-rows: minmax(0, 1fr) auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
   min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-self: stretch !important;
+  justify-self: stretch !important;
+  box-sizing: border-box !important;
+}
+
+/* reviewMain also zero gap/margin so viewer truly edge-to-edge */
+body.reviewMode .reviewMain {
+  gap: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* detailView zero gap so no black strip between player and sidebar */
+body.reviewMode .detailView {
+  gap: 0 !important;
 }
 
 /* Controls: two-row layout — seekbar on top, buttons on bottom */
