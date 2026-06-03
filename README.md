@@ -4,7 +4,7 @@ Amargi Files is a private media review app backed by Cloudflare R2. It supports 
 
 ## Setup
 
-Create a private Cloudflare R2 bucket and an R2 API token with object read/write permissions for that bucket. Add these environment variables:
+Create a private Cloudflare R2 bucket and an R2 API token with object read/write permissions for that bucket. If you want the app to update bucket CORS from the admin settings, the token also needs R2 Admin Read & Write for that bucket. Add these environment variables:
 
 ```bash
 R2_ACCOUNT_ID=your_cloudflare_account_id
@@ -16,6 +16,17 @@ APP_SESSION_SECRET=replace-with-a-long-random-string
 ```
 
 `R2_ENDPOINT` is optional when `R2_ACCOUNT_ID` is set. The bucket should stay private. The app creates signed upload and download URLs. R2 credentials are backend-only environment variables and are not editable from the web UI.
+
+### R2 Browser Upload CORS
+
+Direct browser uploads require CORS on the private R2 bucket. Apply the rules in `r2-cors.json` to the bucket, or use the Cloudflare dashboard:
+
+- Allowed origins: `https://amargi-files.vercel.app`, `https://frameio-uploader.vercel.app`, `http://localhost:4174`, `https://localhost:4175`
+- Allowed methods: `GET`, `HEAD`, `PUT`
+- Allowed headers: `*`
+- Exposed headers: `ETag`, `etag`
+
+If this is missing, uploads fail in the browser with a CORS/storage-bucket message. If the app cannot save CORS automatically, the R2 token likely only has object read/write permissions and not bucket-admin permission.
 
 On Vercel, also set:
 

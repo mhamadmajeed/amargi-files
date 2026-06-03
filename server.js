@@ -550,27 +550,38 @@ async function configureBucketCors(origin) {
   const allowedOrigins = Array.from(
     new Set([
       origin,
+      getEnvSetting("APP_URL"),
       "https://amargi-files.vercel.app",
+      "https://frameio-uploader.vercel.app",
       "http://localhost:4174",
       "https://localhost:4175",
     ].filter(Boolean)),
   );
-  await getR2Client().send(
-    new PutBucketCorsCommand({
-      Bucket: config.bucket,
-      CORSConfiguration: {
-        CORSRules: [
-          {
-            AllowedHeaders: ["*"],
-            AllowedMethods: ["GET", "HEAD", "PUT"],
-            AllowedOrigins: allowedOrigins,
-            ExposeHeaders: ["ETag", "etag"],
-            MaxAgeSeconds: 3600,
-          },
-        ],
-      },
-    }),
-  );
+  try {
+    await getR2Client().send(
+      new PutBucketCorsCommand({
+        Bucket: config.bucket,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedHeaders: ["*"],
+              AllowedMethods: ["GET", "HEAD", "PUT"],
+              AllowedOrigins: allowedOrigins,
+              ExposeHeaders: ["ETag", "etag"],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
+      }),
+    );
+  } catch (error) {
+    if (error?.Code === "AccessDenied" || error?.name === "AccessDenied") {
+      const permissionError = new Error("R2 CORS could not be updated because the current R2 token does not have bucket-admin permission. Update the bucket CORS in Cloudflare, or create an R2 token with Admin Read & Write for this bucket.");
+      permissionError.status = 403;
+      throw permissionError;
+    }
+    throw error;
+  }
 }
 
 async function signedGetUrl(key, contentDisposition = "", expiresIn = 60 * 30) {

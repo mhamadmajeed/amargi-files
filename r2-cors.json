@@ -1,0 +1,23 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://amargi-files.vercel.app",
+      "https://frameio-uploader.vercel.app",
+      "http://localhost:4174",
+      "https://localhost:4175"
+    ],
+    "AllowedMethods": [
+      "GET",
+      "HEAD",
+      "PUT"
+    ],
+    "AllowedHeaders": [
+      "*"
+    ],
+    "ExposeHeaders": [
+      "ETag",
+      "etag"
+    ],
+    "MaxAgeSeconds": 3600
+  }
+]
