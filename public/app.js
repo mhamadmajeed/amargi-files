@@ -2244,12 +2244,17 @@ function closeReview() {
   elements.emptyState.hidden = false;
 }
 
-async function loadDownloads(asset) {
-  elements.downloadButton.disabled = true;
-  elements.downloadButton.textContent = "Loading...";
-  elements.downloadMenu.hidden = true;
-  elements.downloadMenu.innerHTML = "";
-  renderDownloadPanel([], "Loading download options...");
+let downloadRefreshTimer = null;
+
+async function loadDownloads(asset, silent = false) {
+  if (!silent) {
+    elements.downloadButton.disabled = true;
+    elements.downloadButton.textContent = "Loading...";
+    elements.downloadMenu.hidden = true;
+    elements.downloadMenu.innerHTML = "";
+    renderDownloadPanel([], "Loading download options...");
+  }
+  clearTimeout(downloadRefreshTimer);
   try {
     const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/downloads`);
     const items = Array.isArray(data) ? data : [];
@@ -2258,22 +2263,31 @@ async function loadDownloads(asset) {
     renderDownloadPanel(items);
     elements.downloadButton.disabled = !items.length;
     elements.downloadButton.textContent = items.length ? `↓ Download` : "No downloads";
-    elements.downloadMenu.hidden = true;
+    if (!silent) elements.downloadMenu.hidden = true;
+    // Auto-refresh while any rendition is still generating
+    const stillGenerating = items.some((item) => item.generating);
+    if (stillGenerating && state.selectedAsset?.id === asset.id) {
+      downloadRefreshTimer = setTimeout(() => {
+        if (state.selectedAsset?.id === asset.id) loadDownloads(asset, true);
+      }, 4000);
+    }
   } catch (error) {
-    elements.downloadButton.textContent = "↓ Download";
-    elements.downloadButton.disabled = true;
-    elements.downloadMenu.hidden = true;
+    if (!silent) {
+      elements.downloadButton.textContent = "↓ Download";
+      elements.downloadButton.disabled = true;
+      elements.downloadMenu.hidden = true;
+    }
   }
 }
 
 function downloadOptionMarkup(item) {
   const disabled = item.pending || (!item.url && !item.action);
-  const actionText = item.action === "prepare" ? "Prepare" : "↓";
+  const spinner = item.generating ? `<span class="downloadSpinner"></span>` : "";
   return `
     <button class="downloadMenuItem ${disabled ? "pending" : ""}" type="button" data-url="${escapeHtml(item.url || "")}" data-action="${escapeHtml(item.action || "")}" data-export-type="${escapeHtml(item.exportType || "")}" data-quality="${escapeHtml(item.quality || "")}" ${disabled ? "disabled" : ""}>
       <strong>${escapeHtml(item.label)}</strong>
       <span>${escapeHtml(item.detail || "")}</span>
-      ${!disabled ? `<em>${actionText}</em>` : ""}
+      ${item.generating ? spinner : (!disabled ? `<em>↓</em>` : "")}
     </button>
   `;
 }
@@ -2297,24 +2311,6 @@ function toggleDownloadMenu(force) {
 async function handleDownloadMenuClick(event) {
   const item = event.target.closest(".downloadMenuItem");
   if (!item || item.disabled) return;
-  if (item.dataset.action === "prepare") {
-    try {
-      item.disabled = true;
-      item.classList.add("pending");
-      const body = item.dataset.exportType === "audio"
-        ? { type: "audio" }
-        : { type: "video", quality: item.dataset.quality };
-      await api(`/api/accounts/${state.currentAccountId}/files/${state.selectedAsset.id}/exports`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      setAlert("Export started. You can keep working; the download will appear when it is ready.");
-      await loadDownloads(state.selectedAsset);
-    } catch (error) {
-      setAlert(error.message, 5000);
-    }
-    return;
   }
   if (!item.dataset.url) return;
   toggleDownloadMenu(false);

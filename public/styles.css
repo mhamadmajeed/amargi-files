@@ -8203,6 +8203,18 @@ body.reviewMode .downloadMenuItem strong { flex: 1 !important; color: #c8d3e6 !i
 body.reviewMode .downloadMenuItem span { color: #4d5c72 !important; font-size: 0.68rem !important; }
 body.reviewMode .downloadMenuItem em { color: #7b93ff !important; font-style: normal !important; font-weight: 700 !important; }
 
+.downloadSpinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(100,120,160,0.3);
+  border-top-color: #7b93ff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* 3. Alert floats over player */
 body.reviewMode #alert {
   position: fixed !important;

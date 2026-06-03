@@ -2359,27 +2359,21 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
         url: await signedGetUrl(rendition.key, `attachment; filename="${fileBaseName(file.name)}-${rendition.label}.mp4"`, 60 * 30),
       });
     }
-    if (isVideo(file)) {
+    if (isVideo(file) && getFfmpegPath() && originalExists) {
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = file.exportJobs?.[rendition.quality] || "";
-        // Skip renditions that were skipped because source resolution is too low
+        // Skip renditions skipped because source resolution is too low
         if (status === "skipped") continue;
+        // Auto-kick off generation if not already running or failed
+        if (status !== "processing" && status !== "failed") {
+          generateVideoProxy(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false }).catch(() => {});
+        }
         downloads.push({
-          key: `prepare-${rendition.quality}`,
+          key: `pending-${rendition.quality}`,
           label: `${rendition.label} MP4`,
-          detail: !originalExists
-            ? "Original file is missing from storage"
-            : !ffmpegAvailable
-              ? "FFmpeg is not configured on this machine"
-              : status === "processing"
-                ? "Preparing in the background"
-                : status === "failed"
-                  ? "Failed - click to retry"
-                  : "Prepare this export",
-          action: originalExists && ffmpegAvailable && status !== "processing" ? "prepare" : "",
-          exportType: "video",
-          quality: rendition.quality,
-          pending: status === "processing" || !originalExists || !ffmpegAvailable,
+          detail: status === "failed" ? "Processing failed — retrying…" : "Generating…",
+          pending: true,
+          generating: true,
         });
       }
     }
