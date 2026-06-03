@@ -2126,10 +2126,9 @@ async function uploadMultipartFile(folderId, file) {
 async function selectAsset(asset) {
   state.selectedAsset = asset;
   const kind = assetKind(asset);
-  document.body.classList.add("reviewMode");
-  document.body.classList.remove("isPlayingVideo");
-  elements.emptyState.hidden = true;
-  elements.detailView.hidden = false;
+
+  // Do all DOM mutations before adding reviewMode class so only one
+  // expensive CSS recalculation happens when the class is applied.
   if (elements.assetTitle) elements.assetTitle.textContent = asset.name;
   elements.reviewFileTitle.textContent = asset.name;
   elements.assetMeta.textContent = `${asset.mimetype || "file"} - ${formatBytes(asset.filesize || asset.size)}`;
@@ -2146,6 +2145,13 @@ async function selectAsset(asset) {
   elements.seekBar.disabled = kind !== "video";
   elements.imagePreview.hidden = kind !== "image";
   elements.imagePreview.removeAttribute("src");
+  elements.emptyState.hidden = true;
+  elements.detailView.hidden = false;
+
+  // Add reviewMode LAST — triggers the one expensive CSS recalculation
+  document.body.classList.remove("isPlayingVideo");
+  document.body.classList.add("reviewMode");
+
   if (kind === "video") {
     const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
     elements.videoPlayer.removeAttribute("src");
