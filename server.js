@@ -2924,9 +2924,40 @@ async function getHttpsCredentials() {
   return { key: generated.private, cert: generated.cert };
 }
 
+async function requeuePendingProxies() {
+  if (!getFfmpegPath() || !hasR2Config()) return;
+  try {
+    const db = await readMediaDb();
+    const pending = (db.files || []).filter((f) =>
+      f.r2Key && !f.deletedAt && (f.proxyStatus === "pending" || f.proxyStatus === "processing")
+    );
+    if (!pending.length) return;
+    // Reset processing → pending in DB so status shows correctly
+    let changed = false;
+    for (const f of pending) {
+      if (f.proxyStatus === "processing") { f.proxyStatus = "pending"; changed = true; }
+      if (f.exportJobs) {
+        for (const k of Object.keys(f.exportJobs)) {
+          if (f.exportJobs[k] === "processing") { f.exportJobs[k] = ""; changed = true; }
+        }
+      }
+    }
+    if (changed) await writeMediaDb(db);
+    console.log(`[Startup] Re-queuing proxy generation for ${pending.length} file(s)…`);
+    for (const f of pending) {
+      generateVideoProxy(f.id, { qualities: ["1080", "720", "480"], includeAudio: true }).catch((err) =>
+        console.error(`[Startup] Proxy failed for ${f.id}:`, err.message)
+      );
+    }
+  } catch (err) {
+    console.error("[Startup] requeuePendingProxies error:", err.message);
+  }
+}
+
 if (require.main === module) {
   app.listen(port, () => {
     console.log(`MediaFlow running at http://localhost:${port}`);
+    requeuePendingProxies();
   });
   getHttpsCredentials()
     .then((credentials) => {

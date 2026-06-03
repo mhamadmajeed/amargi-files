@@ -8228,16 +8228,20 @@ body.reviewMode #alert {
   box-shadow: 0 8px 24px rgb(0 0 0 / 50%) !important;
 }
 
-body.reviewMode .layout,
-body.reviewMode .reviewPane {
+/* layout is a direct flex child of workspace — flex trick gives it remaining height */
+body.reviewMode .layout {
   flex: 1 1 0 !important;
   height: 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
 }
 
+/* reviewPane and detailView fill downward via 100% */
+body.reviewMode .assetPane,
+body.reviewMode .reviewPane,
 body.reviewMode .detailView {
   height: 100% !important;
+  min-height: 0 !important;
   overflow: hidden !important;
 }
 
