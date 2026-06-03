@@ -6711,6 +6711,26 @@ body.reviewMode .commentItem .commentJump .commentText {
   padding: 0;
 }
 
+body.reviewMode .commentsList .commentItem {
+  border-color: transparent;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.reviewMode .commentsList .commentItem:hover,
+body.reviewMode .commentsList .commentItem:focus-within {
+  border-color: transparent;
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+  background: transparent;
+}
+
+body.reviewMode .commentsList .commentText {
+  color: #ffffff;
+  background: transparent;
+}
+
 .adminUsersList {
   display: grid;
   gap: 10px;
