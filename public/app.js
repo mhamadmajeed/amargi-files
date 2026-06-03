@@ -2225,6 +2225,7 @@ function closeReview() {
   elements.seekBar.disabled = false;
   elements.detailView.hidden = true;
   elements.emptyState.hidden = false;
+  if (elements.downloadPanel) elements.downloadPanel.hidden = true;
 }
 
 async function loadDownloads(asset) {
@@ -2242,19 +2243,24 @@ async function loadDownloads(asset) {
     elements.downloadButton.disabled = !items.length;
     elements.downloadButton.textContent = items.length ? `Download (${items.length})` : "No downloads";
     elements.downloadMenu.hidden = true;
+    if (elements.downloadPanel) elements.downloadPanel.hidden = false;
   } catch (error) {
     elements.downloadButton.textContent = "Downloads unavailable";
     elements.downloadButton.disabled = true;
     elements.downloadMenu.hidden = true;
     renderDownloadPanel([], error.message || "Download options could not be loaded.");
+    if (elements.downloadPanel) elements.downloadPanel.hidden = false;
   }
 }
 
 function downloadOptionMarkup(item) {
+  const disabled = item.pending || (!item.url && !item.action);
+  const actionText = item.action === "prepare" ? "Prepare" : "Download";
   return `
-    <button class="downloadMenuItem ${item.pending || !item.url ? "pending" : ""}" type="button" data-url="${escapeHtml(item.url || "")}" ${item.pending || !item.url ? "disabled" : ""}>
+    <button class="downloadMenuItem ${disabled ? "pending" : ""}" type="button" data-url="${escapeHtml(item.url || "")}" data-action="${escapeHtml(item.action || "")}" data-export-type="${escapeHtml(item.exportType || "")}" data-quality="${escapeHtml(item.quality || "")}" ${disabled ? "disabled" : ""}>
       <strong>${escapeHtml(item.label)}</strong>
       <span>${escapeHtml(item.detail || "")}</span>
+      ${!disabled ? `<em>${actionText}</em>` : ""}
     </button>
   `;
 }
@@ -2275,9 +2281,29 @@ function toggleDownloadMenu(force) {
   elements.downloadMenu.hidden = !shouldOpen;
 }
 
-function handleDownloadMenuClick(event) {
+async function handleDownloadMenuClick(event) {
   const item = event.target.closest(".downloadMenuItem");
-  if (!item || item.disabled || !item.dataset.url) return;
+  if (!item || item.disabled) return;
+  if (item.dataset.action === "prepare") {
+    try {
+      item.disabled = true;
+      item.classList.add("pending");
+      const body = item.dataset.exportType === "audio"
+        ? { type: "audio" }
+        : { type: "video", quality: item.dataset.quality };
+      await api(`/api/accounts/${state.currentAccountId}/files/${state.selectedAsset.id}/exports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setAlert("Export started. You can keep working; the download will appear when it is ready.");
+      await loadDownloads(state.selectedAsset);
+    } catch (error) {
+      setAlert(error.message);
+    }
+    return;
+  }
+  if (!item.dataset.url) return;
   toggleDownloadMenu(false);
   location.href = item.dataset.url;
 }

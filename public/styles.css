@@ -6680,6 +6680,14 @@ body.reviewMode .commentForm .primaryButton {
   font-size: 0.72rem;
 }
 
+.downloadMenuItem em {
+  margin-top: 2px;
+  color: #8ea2ff;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
 .uploadQueue {
   display: grid;
   gap: 8px;
