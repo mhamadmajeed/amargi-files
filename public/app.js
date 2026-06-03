@@ -1301,8 +1301,19 @@ async function loadComments(asset) {
   renderCommentMarkers();
 }
 
+function sortedComments(comments = state.comments) {
+  return [...comments].sort((a, b) => {
+    const timeA = Number(a.timestamp) || 0;
+    const timeB = Number(b.timestamp) || 0;
+    if (timeA !== timeB) return timeA - timeB;
+    const createdA = Date.parse(a.created_at || a.createdAt || "") || 0;
+    const createdB = Date.parse(b.created_at || b.createdAt || "") || 0;
+    return createdA - createdB;
+  });
+}
+
 function renderComments() {
-  const rows = state.comments.filter((comment) => {
+  const rows = sortedComments().filter((comment) => {
     const meta = state.commentMeta[comment.id] || {};
     if (state.commentFilter === "open") return !meta.resolved;
     if (state.commentFilter === "resolved") return meta.resolved;
@@ -1345,7 +1356,7 @@ function renderCommentMarkers() {
   const duration = elements.videoPlayer.duration || 0;
   elements.commentMarkers.innerHTML = "";
   if (!duration) return;
-  for (const comment of state.comments) {
+  for (const comment of sortedComments()) {
     const marker = document.createElement("button");
     marker.type = "button";
     marker.className = "commentMarker";
