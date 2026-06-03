@@ -6533,6 +6533,436 @@ body.reviewMode .commentForm .primaryButton {
   font-weight: 650;
 }
 
+.mentionList {
+  grid-column: 2;
+  display: grid;
+  gap: 4px;
+  margin-top: -2px;
+  padding: 6px;
+  border: 1px solid #2b3450;
+  border-radius: 12px;
+  background: #101723;
+  box-shadow: 0 18px 42px rgb(0 0 0 / 34%);
+}
+
+.mentionList[hidden] {
+  display: none;
+}
+
+.mentionOption {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #eef3ff;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionOption:hover,
+.mentionOption.active {
+  background: #202942;
+}
+
+.mentionOptionAvatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: #6d5cff;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.mentionOption strong,
+.mentionOption small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mentionOption strong {
+  font-size: 0.82rem;
+}
+
+.mentionOption small {
+  color: #9da8bd;
+  font-size: 0.7rem;
+  margin-top: 1px;
+}
+
+#commentButton:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.downloadControl {
+  position: relative;
+  min-width: 180px;
+}
+
+.downloadControl .downloadSelect {
+  width: 100%;
+}
+
+.downloadMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  display: grid;
+  width: min(320px, 82vw);
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid #2a3448;
+  border-radius: 12px;
+  background: #0d121b;
+  box-shadow: 0 22px 50px rgb(0 0 0 / 42%);
+}
+
+.downloadMenu[hidden] {
+  display: none;
+}
+
+.downloadMenuItem {
+  display: grid;
+  gap: 2px;
+  min-height: 46px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #f7f9ff;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.downloadMenuItem:hover {
+  background: #1a2334;
+}
+
+.downloadMenuItem:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.downloadMenuItem strong {
+  font-size: 0.82rem;
+}
+
+.downloadMenuItem span {
+  color: #9da8ba;
+  font-size: 0.72rem;
+}
+
+.tagEditor {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tagPill {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #2d3850;
+  border-radius: 999px;
+  background: #111a29;
+  color: #dce7ff;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.tagPill button {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #273249;
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.tagEmpty {
+  color: #7f8a9e;
+  font-size: 0.72rem;
+}
+
+.tagForm {
+  display: flex;
+  gap: 6px;
+}
+
+.tagForm input {
+  min-height: 34px;
+  flex: 1;
+  border-radius: 9px;
+}
+
+.tagForm .ghostButton {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.projectRulesList {
+  display: grid;
+  gap: 10px;
+}
+
+.projectPermissionGrid {
+  border: 1px solid #252d3f;
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0;
+  padding: 12px;
+}
+
+.projectPermissionGrid legend {
+  color: #9ca8bb;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  padding: 0 6px;
+}
+
+.projectRuleCard {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #252d3f;
+  border-radius: 12px;
+  background: #101722;
+  padding: 12px;
+}
+
+.projectRuleCard > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.projectRuleCard strong {
+  color: #f7f9ff;
+  font-size: 0.9rem;
+}
+
+.projectRuleCard span {
+  color: #9ca8bb;
+  font-size: 0.74rem;
+}
+
+.projectRuleCard .projectRuleSave {
+  justify-self: end;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.destinationModal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(3, 6, 12, 0.74);
+  backdrop-filter: blur(16px);
+}
+
+.destinationModal[hidden] {
+  display: none;
+}
+
+.destinationDialog {
+  width: min(980px, calc(100vw - 32px));
+  height: min(760px, calc(100vh - 32px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #273043;
+  border-radius: 14px;
+  background: #0d121b;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.5);
+}
+
+.destinationHeader,
+.destinationFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #202838;
+}
+
+.destinationFooter {
+  border-top: 1px solid #202838;
+  border-bottom: 0;
+}
+
+.destinationHeader h2 {
+  margin: 0;
+  color: #f7f9ff;
+  font-size: 1rem;
+}
+
+.destinationSearchWrap {
+  padding: 14px 18px;
+  border-bottom: 1px solid #202838;
+}
+
+.destinationSearchWrap input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid #2b3548;
+  background: #111823;
+  color: #f7f9ff;
+  padding: 0 14px;
+}
+
+.destinationBody {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.destinationProjectList {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  border-right: 1px solid #202838;
+}
+
+.destinationProjectList button {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding: 11px 12px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #f7f9ff;
+  cursor: pointer;
+}
+
+.destinationProjectList button.active,
+.destinationProjectList button:hover {
+  border-color: #33405a;
+  background: #171e2c;
+}
+
+.destinationProjectList span,
+.destinationFolderRow small,
+.destinationFooter span {
+  color: #9ca8bb;
+  font-size: 0.75rem;
+}
+
+.destinationTreePanel {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+}
+
+.destinationTree {
+  display: grid;
+  gap: 2px;
+}
+
+.destinationTreeNode {
+  display: grid;
+}
+
+.destinationFolderRow {
+  display: grid;
+  grid-template-columns: 28px 28px minmax(140px, 1fr) minmax(180px, 1.4fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  margin-left: calc(var(--depth, 0) * 18px);
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #eef3ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.destinationFolderRow:hover,
+.destinationFolderRow.selected {
+  border-color: #384766;
+  background: #171e2c;
+}
+
+.destinationFolderRow.selected {
+  box-shadow: inset 3px 0 0 #665cff;
+}
+
+.destinationFolderToggle {
+  color: #9ca8bb;
+  font-weight: 900;
+  text-align: center;
+}
+
+.destinationFolderIcon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #64a4ff;
+  stroke-width: 2;
+}
+
+.destinationFolderName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.destinationFooter > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.destinationFooter strong {
+  max-width: min(620px, 50vw);
+  overflow: hidden;
+  color: #f7f9ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.destinationEmpty {
+  color: #9ca8bb;
+  margin: 24px;
+}
+
 body.reviewMode .commentForm .mentionHint {
   grid-column: 2;
 }
@@ -6753,10 +7183,14 @@ body.reviewMode .commentsList .commentText {
   height: 38px;
   place-items: center;
   border-radius: 10px;
-  background: #202a3d;
+  background: #202a3d center / cover no-repeat;
   color: #dfe6f6;
   font-size: 0.78rem;
   font-weight: 850;
+}
+
+.adminMemberAvatar.hasImage {
+  color: transparent;
 }
 
 .adminMemberInfo {
@@ -6782,6 +7216,12 @@ body.reviewMode .commentsList .commentText {
   font-size: 0.76rem;
 }
 
+.adminMemberInfo .adminUsername {
+  color: #d8d2ff;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
 .adminMemberInfo small {
   color: #788294;
   font-size: 0.68rem;
@@ -6795,7 +7235,7 @@ body.reviewMode .commentsList .commentText {
 .adminMemberActions {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -6829,6 +7269,190 @@ body.reviewMode .commentsList .commentText {
   margin-top: 12px;
 }
 
+.settingsPage {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  width: 100vw;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(420px, 760px);
+  align-content: start;
+  justify-content: center;
+  gap: 18px;
+  padding: 28px clamp(18px, 4vw, 56px);
+  border-right: 0;
+  background: #080b10;
+  box-shadow: none;
+  transform: translateY(14px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.settingsPage.open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.settingsPage .settingsHeader {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-bottom: 1px solid #1c2330;
+  padding-bottom: 16px;
+}
+
+.settingsPage .connectionControls {
+  grid-column: 1;
+  align-content: start;
+  border: 1px solid #202734;
+  border-radius: 12px;
+  background: #0f141d;
+  padding: 12px;
+}
+
+.settingsNav {
+  grid-column: 1;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 10px;
+  border: 1px solid #202734;
+  border-radius: 12px;
+  background: #0d1118;
+}
+
+.settingsNavButton {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #9ca8bd;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settingsNavButton:hover {
+  background: #141b27;
+  color: #eef3ff;
+}
+
+.settingsNavButton.active {
+  background: #253047;
+  color: #ffffff;
+}
+
+.settingsContent {
+  grid-column: 2;
+  display: grid;
+  min-height: 420px;
+  align-content: start;
+}
+
+.settingsSection {
+  display: none !important;
+}
+
+.settingsSection.active {
+  display: grid !important;
+}
+
+.settingsPage .settingsGroup,
+.settingsPage .accountPanel,
+.settingsPage .adminPanel {
+  grid-column: 2;
+  align-content: start;
+  border-radius: 12px;
+  background: #0d1118;
+}
+
+.profileForm {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profileForm label,
+.profileForm .primaryButton,
+.profileForm .muted {
+  grid-column: 1 / -1;
+}
+
+.profileAvatarRow {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profileAvatarPreview {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid #2a3344;
+  border-radius: 18px;
+  background: #182236 center / cover no-repeat;
+  color: #f5f7fb;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.profileAvatarPreview.hasImage {
+  color: transparent;
+}
+
+.avatarUploadButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid #2a3143;
+  border-radius: 9px;
+  background: #111722;
+  color: #dce4f5;
+  font-size: 0.78rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.avatarUploadButton input {
+  display: none;
+}
+
+#profileUsername {
+  color: #aeb7ca;
+  cursor: not-allowed;
+}
+
+body.isMember .adminOnly {
+  display: none !important;
+}
+
+@media (max-width: 860px) {
+  .settingsPage {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .settingsPage .connectionControls,
+  .settingsNav,
+  .settingsContent,
+  .settingsPage .settingsGroup,
+  .settingsPage .accountPanel,
+  .settingsPage .adminPanel {
+    grid-column: 1;
+  }
+}
+
 .adminNotifyForm .fullField {
   grid-column: 1 / -1;
 }
@@ -6837,4 +7461,26 @@ body.reviewMode .commentsList .commentText {
   width: 100%;
   min-height: 86px;
   resize: vertical;
+}
+
+body.reviewMode .assignmentField {
+  min-height: 96px;
+}
+
+body.reviewMode .assignmentField select[multiple] {
+  height: 62px;
+  min-height: 62px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #0d1320;
+}
+
+body.reviewMode .assignmentField select[multiple] option {
+  padding: 5px 7px;
+  border-radius: 7px;
+}
+
+body.reviewMode .assignmentField select[multiple] option:checked {
+  background: #5d55ff;
+  color: #fff;
 }

@@ -70,10 +70,13 @@
         <div id="notificationsList" class="notificationsList"></div>
       </aside>
 
-      <aside id="sidebar" class="sidebar" aria-label="Settings">
+      <aside id="sidebar" class="sidebar settingsPage" aria-label="Settings">
         <div class="settingsHeader">
-          <strong>Settings</strong>
-          <span>Account, workspace, and admin controls</span>
+          <div>
+            <strong>Settings</strong>
+            <span>Profile and account controls</span>
+          </div>
+          <button id="closeSettingsButton" class="ghostButton" type="button">Close</button>
         </div>
 
         <div class="connectionControls">
@@ -84,27 +87,48 @@
           <button id="appLogoutButton" class="ghostButton" type="button">Sign out</button>
         </div>
 
-        <section class="settingsGroup">
-          <div>
-            <p class="eyebrow">Storage</p>
-            <strong>Library</strong>
-          </div>
-          <label>
-            Account
-            <select id="accountSelect">
-              <option value="">Load accounts</option>
-            </select>
-          </label>
+        <nav class="settingsNav" aria-label="Settings sections">
+          <button class="settingsNavButton active" type="button" data-settings-section="profile">Profile</button>
+          <button class="settingsNavButton" type="button" data-settings-section="password">Password</button>
+          <button class="settingsNavButton adminOnly" type="button" data-settings-section="members">Members</button>
+          <button class="settingsNavButton adminOnly" type="button" data-settings-section="notifications">Notifications</button>
+          <button class="settingsNavButton adminOnly" type="button" data-settings-section="projects">Projects</button>
+          <button class="settingsNavButton adminOnly" type="button" data-settings-section="storage">Storage</button>
+          <button class="settingsNavButton adminOnly" type="button" data-settings-section="email">Email</button>
+        </nav>
 
-          <label>
-            Workspace
-            <select id="workspaceSelect" disabled>
-              <option value="">Choose account</option>
-            </select>
-          </label>
+        <div class="settingsContent">
+        <section class="accountPanel profilePanel settingsSection active" data-settings-panel="profile">
+          <div>
+            <p class="eyebrow">Profile</p>
+            <strong>Your account</strong>
+          </div>
+          <form id="profileForm" class="adminUserForm profileForm">
+            <div class="profileAvatarRow">
+              <span id="profileAvatarPreview" class="profileAvatarPreview">M</span>
+              <label class="avatarUploadButton">
+                Upload picture
+                <input id="profileAvatarInput" type="file" accept="image/*" />
+              </label>
+            </div>
+            <label>
+              Name
+              <input id="profileName" type="text" autocomplete="name" required />
+            </label>
+            <label>
+              Email
+              <input id="profileEmail" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              Username
+              <input id="profileUsername" type="text" disabled />
+            </label>
+            <button id="saveProfileButton" class="primaryButton" type="submit">Save profile</button>
+            <div id="profileMessage" class="muted"></div>
+          </form>
         </section>
 
-        <section class="accountPanel">
+        <section class="accountPanel settingsSection" data-settings-panel="password">
           <div>
             <p class="eyebrow">Account</p>
             <strong>Change password</strong>
@@ -127,7 +151,31 @@
           </form>
         </section>
 
-        <section id="adminPanel" class="adminPanel" hidden>
+        <section id="settingsStorageGroup" class="settingsGroup adminOnly settingsSection" data-settings-panel="storage">
+          <div>
+            <p class="eyebrow">Storage</p>
+            <strong>Library</strong>
+          </div>
+          <div class="storageStatusCard">
+            <span id="r2BackendStatus">Checking storage...</span>
+            <small>R2 is configured from backend environment variables. Bucket keys are no longer edited in the app.</small>
+          </div>
+          <label>
+            Account
+            <select id="accountSelect">
+              <option value="">Load accounts</option>
+            </select>
+          </label>
+
+          <label>
+            Workspace
+            <select id="workspaceSelect" disabled>
+              <option value="">Choose account</option>
+            </select>
+          </label>
+        </section>
+
+        <section id="adminPanel" class="adminPanel adminOnly settingsSection" data-settings-panel="members" hidden>
           <div class="settingsGroupHeader">
             <p class="eyebrow">Admin</p>
             <strong>Create user</strong>
@@ -160,6 +208,13 @@
             <strong>Manage access</strong>
           </div>
           <div class="adminUsersList" id="adminUsersList"></div>
+        </section>
+
+        <section class="adminPanel adminOnly settingsSection" data-settings-panel="notifications" hidden>
+          <div class="settingsGroupHeader">
+            <p class="eyebrow">Notifications</p>
+            <strong>Send member notification</strong>
+          </div>
           <form id="adminNotifyForm" class="adminUserForm adminNotifyForm">
             <label>
               Notify member
@@ -176,14 +231,72 @@
             <button id="sendMemberNotificationButton" class="primaryButton" type="submit">Send notification</button>
             <div id="adminNotifyMessage" class="muted"></div>
           </form>
+        </section>
 
+        <section class="adminPanel adminOnly settingsSection" data-settings-panel="projects" hidden>
           <div class="settingsGroupHeader">
-            <p class="eyebrow">Cloudflare R2</p>
-            <strong>Backend storage</strong>
+            <p class="eyebrow">Projects</p>
+            <strong>Create project</strong>
           </div>
-          <div class="storageStatusCard">
-            <span id="r2BackendStatus">Checking storage...</span>
-            <small>R2 is configured from backend environment variables. Bucket keys are no longer edited in the app.</small>
+          <form id="projectForm" class="adminUserForm">
+            <label>
+              Project name
+              <input id="projectNameInput" type="text" autocomplete="off" placeholder="Project name" />
+            </label>
+            <label class="checkboxLabel">
+              <input id="projectRequireDeletePassword" type="checkbox" />
+              Require password before deleting anything in this project
+            </label>
+            <label>
+              Delete password
+              <input id="projectDeletePassword" type="text" autocomplete="off" placeholder="Optional password" />
+            </label>
+            <label>
+              Retention
+              <select id="projectRetentionDays">
+                <option value="">Indefinitely</option>
+                <option value="30">1 month</option>
+                <option value="60">2 months</option>
+                <option value="90">3 months</option>
+              </select>
+            </label>
+            <fieldset class="projectPermissionGrid">
+              <legend>Member permissions</legend>
+              <label class="checkboxLabel">
+                <input id="projectMembersCanUpload" type="checkbox" checked />
+                Upload and create folders
+              </label>
+              <label class="checkboxLabel">
+                <input id="projectMembersCanDelete" type="checkbox" checked />
+                Delete files and folders
+              </label>
+              <label class="checkboxLabel">
+                <input id="projectMembersCanComment" type="checkbox" checked />
+                Comment and review
+              </label>
+              <label class="checkboxLabel">
+                <input id="projectMembersCanDownload" type="checkbox" checked />
+                Download files
+              </label>
+              <label class="checkboxLabel">
+                <input id="projectMembersCanShare" type="checkbox" checked />
+                Create share links
+              </label>
+            </fieldset>
+            <button id="createProjectButton" class="primaryButton" type="submit">Create project</button>
+            <div id="projectSettingsMessage" class="muted"></div>
+          </form>
+          <div class="settingsGroupHeader">
+            <p class="eyebrow">Rules</p>
+            <strong>Manage projects</strong>
+          </div>
+          <div id="projectRulesList" class="projectRulesList"></div>
+        </section>
+
+        <section class="adminPanel adminOnly settingsSection" data-settings-panel="email" hidden>
+          <div class="settingsGroupHeader">
+            <p class="eyebrow">Email notifications</p>
+            <strong>SMTP settings</strong>
           </div>
           <form id="apiSettingsForm" class="adminUserForm">
             <label hidden>
@@ -206,10 +319,6 @@
               Secret access key
               <input id="r2SecretAccessKey" type="password" autocomplete="off" placeholder="Leave blank to keep current" />
             </label>
-            <div class="settingsGroupHeader">
-              <p class="eyebrow">Email notifications</p>
-              <strong>SMTP settings</strong>
-            </div>
             <label>
               SMTP host
               <input id="smtpHost" type="text" autocomplete="off" placeholder="smtp.gmail.com" />
@@ -242,6 +351,7 @@
             <div id="apiSettingsMessage" class="muted"></div>
           </form>
         </section>
+        </div>
       </aside>
 
       <section class="workspace">
@@ -380,12 +490,19 @@
                       <p class="eyebrow">Selected file</p>
                       <h2 id="assetTitle">Untitled</h2>
                       <span id="assetMeta" class="muted"></span>
+                      <div id="tagEditor" class="tagEditor" hidden>
+                        <div id="tagList" class="tagList"></div>
+                        <form id="tagForm" class="tagForm">
+                          <input id="tagInput" type="text" autocomplete="off" placeholder="Add tag" />
+                          <button class="ghostButton" type="submit">Add</button>
+                        </form>
+                      </div>
                     </div>
                   </div>
                   <div class="workflowControls">
                     <label class="reviewField assignmentField">
                       <span>Assigned</span>
-                      <select id="assigneeSelect">
+                      <select id="assigneeSelect" multiple size="4">
                         <option value="">Unassigned</option>
                       </select>
                     </label>
@@ -401,9 +518,10 @@
                   </div>
                   <div class="toolButtons">
                     <button id="openFrameButton" class="ghostButton" type="button">Share</button>
-                    <select id="downloadSelect" class="downloadSelect" disabled>
-                      <option value="">Download</option>
-                    </select>
+                    <div class="downloadControl">
+                      <button id="downloadButton" class="downloadSelect" type="button" disabled>Download</button>
+                      <div id="downloadMenu" class="downloadMenu" hidden></div>
+                    </div>
                     <button id="renameButton" class="ghostButton" type="button">Rename</button>
                     <button id="deleteButton" class="dangerButton" type="button">Delete</button>
                   </div>
@@ -425,6 +543,7 @@
                   <form id="commentForm" class="commentForm">
                     <textarea id="commentInput" rows="3" placeholder="Write a comment"></textarea>
                     <datalist id="mentionSuggestions"></datalist>
+                    <div id="mentionList" class="mentionList" hidden></div>
                     <small id="mentionHint" class="mentionHint"></small>
                     <button id="commentButton" class="primaryButton" type="submit">Post</button>
                   </form>
@@ -435,6 +554,35 @@
         </div>
       </section>
     </main>
+
+    <div id="destinationModal" class="destinationModal" hidden role="dialog" aria-modal="true" aria-labelledby="destinationTitle">
+      <section class="destinationDialog">
+        <header class="destinationHeader">
+          <div>
+            <p id="destinationEyebrow" class="eyebrow">Move</p>
+            <h2 id="destinationTitle">Choose destination</h2>
+          </div>
+          <button id="destinationCloseButton" class="iconButton" type="button" aria-label="Close destination picker">&times;</button>
+        </header>
+        <div class="destinationSearchWrap">
+          <input id="destinationSearchInput" type="search" autocomplete="off" placeholder="Search projects, folders, paths..." />
+        </div>
+        <div class="destinationBody">
+          <aside id="destinationProjectList" class="destinationProjectList" aria-label="Projects"></aside>
+          <div class="destinationTreePanel">
+            <div id="destinationTree" class="destinationTree" aria-live="polite"></div>
+          </div>
+        </div>
+        <footer class="destinationFooter">
+          <div>
+            <span>Destination</span>
+            <strong id="destinationPath">Select a folder</strong>
+          </div>
+          <button id="destinationCancelButton" class="ghostButton" type="button">Cancel</button>
+          <button id="destinationConfirmButton" class="primaryButton" type="button" disabled>Confirm</button>
+        </footer>
+      </section>
+    </div>
 
     <script src="/app.js"></script>
   </body>

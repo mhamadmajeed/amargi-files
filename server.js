@@ -21,6 +21,7 @@ const { list, put } = require("@vercel/blob");
 const {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
@@ -49,8 +50,35 @@ const INTERNAL_ACCOUNT_ID = "mediaflow-account";
 const INTERNAL_WORKSPACE_ID = "mediaflow-workspace";
 const DEFAULT_PROJECT_ID = "project_uploads";
 const DEFAULT_ROOT_FOLDER_ID = "folder_root";
+const ARCHIVE_PROJECT_ID = "project_archive";
+const ARCHIVE_ROOT_FOLDER_ID = "folder_archive_root";
 const WORKFLOW_STATUSES = new Set(["work_in_progress", "rejected", "approved", "published"]);
 const ACTIVITY_RETENTION_DAYS = 60;
+const ARCHIVE_STRUCTURE = [
+  { name: "Kurdistan", children: ["Iranian Kurdistan", "Iraqi Kurdistan", "Turkish Kurdistan", "Syrian Kurdistan"] },
+  { name: "Iraq" },
+  { name: "Iran" },
+  { name: "Turkey" },
+  { name: "Syria" },
+  { name: "Lebanon" },
+  { name: "Palestine" },
+  { name: "Middle East" },
+  { name: "Europe", children: ["Germany", "France", "Sweden", "Other"] },
+  { name: "International" },
+  { name: "Audio" },
+  { name: "Assets" },
+];
+const ARCHIVE_METADATA_FIELDS = ["date", "country", "regionCity", "peopleFeatured", "organizations", "keywords", "source", "rightsLicenseStatus", "notes", "event", "topic", "year"];
+const DEFAULT_PROJECT_RULES = {
+  requireDeletePassword: false,
+  deletePassword: "",
+  membersCanUpload: true,
+  membersCanDelete: true,
+  membersCanComment: true,
+  membersCanDownload: true,
+  membersCanShare: true,
+  retentionDays: null,
+};
 
 let appSettings = {};
 let appSettingsLoaded = false;
@@ -119,6 +147,39 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function cleanUsernamePart(value) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+}
+
+function usernameFromName(name, email = "") {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return `${cleanUsernamePart(parts[0])}_${cleanUsernamePart(parts.at(-1))}`;
+  }
+  if (parts.length === 1) return cleanUsernamePart(parts[0]);
+  return cleanUsernamePart(String(email).split("@")[0]) || "member";
+}
+
+function uniqueUsername(base, users, currentUserId = "") {
+  const fallback = cleanUsernamePart(base) || "member";
+  const taken = new Set(users
+    .filter((user) => user.id !== currentUserId)
+    .map((user) => cleanUsernamePart(user.username))
+    .filter(Boolean));
+  if (!taken.has(fallback)) return fallback;
+  let index = 2;
+  while (taken.has(`${fallback}${index}`)) index += 1;
+  return `${fallback}${index}`;
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.pbkdf2Sync(String(password), salt, 310000, 32, "sha256").toString("hex");
   return { salt, hash };
@@ -138,7 +199,7 @@ function verifyPassword(password, user) {
 }
 
 function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name, role: user.role || "member", createdAt: user.createdAt };
+  return { id: user.id, email: user.email, name: user.name, username: user.username || "", avatarUrl: user.avatarUrl || "", role: user.role || "member", createdAt: user.createdAt };
 }
 
 async function readUsers() {
@@ -150,6 +211,7 @@ async function readUsers() {
       id: crypto.randomUUID(),
       email: "m.zahawy5@gmail.com",
       name: "Main Admin",
+      username: "main_admin",
       passwordSalt: password.salt,
       passwordHash: password.hash,
       role: "admin",
@@ -157,6 +219,15 @@ async function readUsers() {
     });
     await writeUsers(data.users);
   }
+  let changed = false;
+  for (const user of data.users) {
+    const normalized = uniqueUsername(user.usernameManual ? user.username : usernameFromName(user.name, user.email), data.users, user.id);
+    if (user.username !== normalized) {
+      user.username = normalized;
+      changed = true;
+    }
+  }
+  if (changed) await writeUsers(data.users);
   return data.users;
 }
 
@@ -168,11 +239,19 @@ function defaultMediaDb() {
   const createdAt = new Date().toISOString();
   return {
     version: 1,
-    projects: [{ id: DEFAULT_PROJECT_ID, name: "Uploads", root_folder_id: DEFAULT_ROOT_FOLDER_ID, createdAt }],
-    folders: [{ id: DEFAULT_ROOT_FOLDER_ID, projectId: DEFAULT_PROJECT_ID, parentId: null, name: "Uploads root", createdAt }],
+    projects: [
+      { id: DEFAULT_PROJECT_ID, name: "Uploads", root_folder_id: DEFAULT_ROOT_FOLDER_ID, rules: { ...DEFAULT_PROJECT_RULES }, createdAt },
+      { id: ARCHIVE_PROJECT_ID, name: "Archive", root_folder_id: ARCHIVE_ROOT_FOLDER_ID, system: "archive", rules: { ...DEFAULT_PROJECT_RULES, requireDeletePassword: true }, createdAt },
+    ],
+    folders: [
+      { id: DEFAULT_ROOT_FOLDER_ID, projectId: DEFAULT_PROJECT_ID, parentId: null, name: "Uploads root", createdAt },
+      { id: ARCHIVE_ROOT_FOLDER_ID, projectId: ARCHIVE_PROJECT_ID, parentId: null, name: "Archive root", system: "project_root", createdAt },
+    ],
     files: [],
     comments: {},
     shares: [],
+    folderMetadata: {},
+    archiveIndex: [],
   };
 }
 
@@ -183,8 +262,58 @@ async function readMediaDb() {
   db.files ||= [];
   db.comments ||= {};
   db.shares ||= [];
+  db.folderMetadata ||= {};
+  db.archiveIndex ||= [];
   if (!db.projects.length) db.projects.push(defaultMediaDb().projects[0]);
   if (!db.folders.length) db.folders.push(defaultMediaDb().folders[0]);
+  let changed = false;
+  if (!db.projects.some((project) => project.id === ARCHIVE_PROJECT_ID || project.system === "archive")) {
+    db.projects.push({ id: ARCHIVE_PROJECT_ID, name: "Archive", root_folder_id: ARCHIVE_ROOT_FOLDER_ID, system: "archive", rules: { ...DEFAULT_PROJECT_RULES, requireDeletePassword: true, deletePassword: archiveDeletePassword() }, createdAt: new Date().toISOString() });
+    changed = true;
+  }
+  const archiveProject = db.projects.find((project) => project.system === "archive" || project.id === ARCHIVE_PROJECT_ID);
+  archiveProject.rules ||= {};
+  archiveProject.rules.requireDeletePassword = true;
+  if (!archiveProject.rules.deletePassword && archiveDeletePassword()) archiveProject.rules.deletePassword = archiveDeletePassword();
+  if (!db.folders.some((folder) => folder.id === archiveProject.root_folder_id)) {
+    const oldArchiveFolder = db.folders.find((folder) => folder.system === "archive" || folder.name === "Archive");
+    if (oldArchiveFolder) {
+      const oldArchiveId = oldArchiveFolder.id;
+      oldArchiveFolder.projectId = archiveProject.id;
+      oldArchiveFolder.parentId = null;
+      oldArchiveFolder.name = "Archive root";
+      oldArchiveFolder.system = "project_root";
+      archiveProject.root_folder_id = oldArchiveFolder.id;
+      const descendantIds = new Set([oldArchiveId]);
+      let foundDescendant = true;
+      while (foundDescendant) {
+        foundDescendant = false;
+        for (const folder of db.folders) {
+          if (folder.parentId && descendantIds.has(folder.parentId) && !descendantIds.has(folder.id)) {
+            descendantIds.add(folder.id);
+            foundDescendant = true;
+          }
+        }
+      }
+      for (const folder of db.folders) {
+        if (descendantIds.has(folder.id)) folder.projectId = archiveProject.id;
+      }
+      for (const file of db.files) {
+        if (descendantIds.has(file.folderId)) file.projectId = archiveProject.id;
+      }
+    } else {
+      db.folders.push({ id: ARCHIVE_ROOT_FOLDER_ID, projectId: archiveProject.id, parentId: null, name: "Archive root", system: "project_root", createdAt: new Date().toISOString() });
+      archiveProject.root_folder_id = ARCHIVE_ROOT_FOLDER_ID;
+    }
+    changed = true;
+  }
+  for (const project of db.projects) {
+    project.rules = { ...DEFAULT_PROJECT_RULES, ...(project.rules || {}) };
+  }
+  if (ensureArchiveStructure(db, archiveProject)) changed = true;
+  if (changed) {
+    await writeMediaDb(db);
+  }
   return db;
 }
 
@@ -462,6 +591,18 @@ async function deleteObject(key) {
   await getR2Client().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key })).catch(() => {});
 }
 
+async function copyObjectIfExists(sourceKey, targetKey) {
+  if (!sourceKey || !targetKey || !hasR2Config()) return false;
+  if (!(await objectExists(sourceKey))) return false;
+  const config = getR2Config();
+  await getR2Client().send(new CopyObjectCommand({
+    Bucket: config.bucket,
+    CopySource: `${config.bucket}/${sourceKey}`,
+    Key: targetKey,
+  }));
+  return true;
+}
+
 async function objectExists(key) {
   if (!key || !hasR2Config()) return false;
   const config = getR2Config();
@@ -520,6 +661,114 @@ function isVideo(file) {
   return String(file.mimeType || file.type || "").startsWith("video/") || /\.(mp4|mov|m4v|webm)$/i.test(file.name || "");
 }
 
+function normalizeTags(tags) {
+  const values = Array.isArray(tags) ? tags : String(tags || "").split(",");
+  return Array.from(new Set(values.map((tag) => String(tag || "").trim()).filter(Boolean))).slice(0, 20);
+}
+
+function slugFolderName(value, fallback = "Untitled-Story") {
+  return String(value || fallback)
+    .trim()
+    .replace(/['"]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || fallback;
+}
+
+function normalizeArchiveMetadata(value = {}) {
+  const metadata = {};
+  for (const field of ARCHIVE_METADATA_FIELDS) metadata[field] = String(value[field] || "").trim();
+  metadata.year = String(metadata.year || (metadata.date ? new Date(metadata.date).getFullYear() : new Date().getFullYear())).trim();
+  if (!/^\d{4}$/.test(metadata.year)) metadata.year = String(new Date().getFullYear());
+  metadata.event = slugFolderName(metadata.event || metadata.topic || "Untitled-Story");
+  metadata.topic = metadata.topic || metadata.event.replace(/-/g, " ");
+  return metadata;
+}
+
+function ensureFolderRecord(db, projectId, parentId, name, system = "") {
+  let folder = db.folders.find((item) => item.projectId === projectId && item.parentId === parentId && item.name === name);
+  if (folder) return folder;
+  folder = { id: crypto.randomUUID(), projectId, parentId, name, createdAt: new Date().toISOString() };
+  if (system) folder.system = system;
+  db.folders.push(folder);
+  return folder;
+}
+
+function ensureArchiveStructure(db, archiveProject) {
+  let changed = false;
+  const before = db.folders.length;
+  for (const section of ARCHIVE_STRUCTURE) {
+    const top = ensureFolderRecord(db, archiveProject.id, archiveProject.root_folder_id, section.name);
+    for (const child of section.children || []) ensureFolderRecord(db, archiveProject.id, top.id, child);
+  }
+  changed = db.folders.length !== before;
+  return changed;
+}
+
+function archiveSectionForMetadata(db, archiveProject, metadata) {
+  const country = String(metadata.country || "").toLowerCase();
+  const region = String(metadata.regionCity || "").toLowerCase();
+  const topic = String(metadata.topic || metadata.keywords || "").toLowerCase();
+  const folders = db.folders.filter((folder) => folder.projectId === archiveProject.id);
+  const byParentAndName = (parentId, name) => folders.find((folder) => folder.parentId === parentId && folder.name.toLowerCase() === name.toLowerCase());
+  const top = (name) => byParentAndName(archiveProject.root_folder_id, name);
+  const child = (parent, name) => parent ? byParentAndName(parent.id, name) : null;
+  const kurdistan = top("Kurdistan");
+  if (topic.includes("kurd") || region.includes("kurdistan")) {
+    if (country.includes("iran")) return child(kurdistan, "Iranian Kurdistan") || kurdistan;
+    if (country.includes("iraq")) return child(kurdistan, "Iraqi Kurdistan") || kurdistan;
+    if (country.includes("turkey")) return child(kurdistan, "Turkish Kurdistan") || kurdistan;
+    if (country.includes("syria")) return child(kurdistan, "Syrian Kurdistan") || kurdistan;
+    return kurdistan;
+  }
+  for (const name of ["Iraq", "Iran", "Turkey", "Syria", "Lebanon", "Palestine"]) {
+    if (country.includes(name.toLowerCase())) return top(name);
+  }
+  const europe = top("Europe");
+  for (const name of ["Germany", "France", "Sweden"]) {
+    if (country.includes(name.toLowerCase())) return child(europe, name) || europe;
+  }
+  if (country.includes("europe")) return europe;
+  if (topic.includes("audio")) return top("Audio");
+  if (topic.includes("asset") || topic.includes("graphic")) return top("Assets");
+  if (country || region) return top("International");
+  return top("Middle East") || top("International") || kurdistan;
+}
+
+function archiveSearchText(metadata, file = null, folder = null) {
+  return [
+    file?.name,
+    folder?.name,
+    metadata.person,
+    metadata.peopleFeatured,
+    metadata.location,
+    metadata.country,
+    metadata.regionCity,
+    metadata.organization,
+    metadata.organizations,
+    metadata.event,
+    metadata.topic,
+    metadata.keywords,
+    metadata.year,
+    metadata.source,
+    metadata.notes,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function upsertArchiveIndex(db, entry) {
+  db.archiveIndex ||= [];
+  const index = db.archiveIndex.findIndex((item) => item.fileId === entry.fileId);
+  if (index >= 0) db.archiveIndex[index] = { ...db.archiveIndex[index], ...entry };
+  else db.archiveIndex.unshift(entry);
+  db.archiveIndex = db.archiveIndex.slice(0, 5000);
+}
+
+function normalizeRetentionDays(value) {
+  if (value === null || value === undefined || value === "" || value === "indefinite") return null;
+  const days = Number(value);
+  return [30, 60, 90].includes(days) ? days : null;
+}
+
 const VIDEO_RENDITIONS = [
   { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23" },
   { quality: "720", label: "720p", maxWidth: 1280, crf: "24" },
@@ -543,15 +792,124 @@ function fileRenditionEntries(file) {
   return VIDEO_RENDITIONS.map((rendition) => ({ ...rendition, key: renditions[rendition.quality]?.key })).filter((item) => item.key);
 }
 
+function shouldStartProxyJob(file) {
+  if (!isVideo(file) || !hasR2Config()) return false;
+  if (!getFfmpegPath()) return false;
+  const missingRenditions = !VIDEO_RENDITIONS.every((rendition) => file.renditions?.[rendition.quality]?.key);
+  const missingAudio = !file.audioKey && file.audioStatus !== "not_available";
+  if (!missingRenditions && !missingAudio) return false;
+  if (file.proxyStatus !== "processing") return true;
+  const startedAt = Date.parse(file.proxyStartedAt || file.updatedAt || "");
+  return !startedAt || Date.now() - startedAt > 5 * 60 * 1000;
+}
+
+function getFfmpegPath() {
+  return process.env.FFMPEG_PATH || ffmpegInstaller?.path || "";
+}
+
 function fileStorageKeys(file) {
-  return [file.r2Key, file.proxyKey, file.thumbnailKey, ...fileRenditionEntries(file).map((item) => item.key)];
+  return [file.r2Key, file.proxyKey, file.thumbnailKey, file.audioKey, ...fileRenditionEntries(file).map((item) => item.key)];
 }
 
-function toApiFolder(folder) {
-  return { id: folder.id, name: folder.name, type: "folder", project_id: folder.projectId, parent_id: folder.parentId, created_at: folder.createdAt };
+function fileStorageKeysForDelete(db, file) {
+  const keys = fileStorageKeys(file).filter(Boolean);
+  return keys.filter((key) => !db.files.some((item) => item.id !== file.id && !item.deletedAt && fileStorageKeys(item).includes(key)));
 }
 
-function toApiFile(file) {
+function createArchiveReferenceRecord(sourceFile, targetFolder, metadata) {
+  const createdAt = new Date().toISOString();
+  return {
+    ...sourceFile,
+    id: crypto.randomUUID(),
+    projectId: targetFolder.projectId,
+    folderId: targetFolder.id,
+    createdAt,
+    updatedAt: createdAt,
+    archivedAt: createdAt,
+    archivedFromFileId: sourceFile.id,
+    archiveReference: true,
+    archiveMetadata: metadata,
+    deletedAt: undefined,
+    multipartUploadId: undefined,
+  };
+}
+
+async function copyFileRecordToFolder(sourceFile, targetFolder) {
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const copy = {
+    ...sourceFile,
+    id,
+    projectId: targetFolder.projectId,
+    folderId: targetFolder.id,
+    ownerEmail: sourceFile.ownerEmail,
+    createdAt,
+    updatedAt: createdAt,
+    sourceFileId: sourceFile.id,
+    copiedAt: createdAt,
+    deletedAt: undefined,
+    multipartUploadId: undefined,
+    uploadType: sourceFile.uploadType || "",
+  };
+  copy.r2Key = storageKey("projects", targetFolder.projectId, "files", id, "original" + extensionFor(sourceFile.name));
+  if (!(await copyObjectIfExists(sourceFile.r2Key, copy.r2Key))) copy.r2Key = sourceFile.r2Key;
+  if (sourceFile.proxyKey) {
+    const proxyKey = storageKey("projects", targetFolder.projectId, "files", id, "proxy-1080.mp4");
+    copy.proxyKey = (await copyObjectIfExists(sourceFile.proxyKey, proxyKey)) ? proxyKey : sourceFile.proxyKey;
+  }
+  if (sourceFile.thumbnailKey) {
+    const thumbnailKey = storageKey("projects", targetFolder.projectId, "files", id, "thumb.jpg");
+    copy.thumbnailKey = (await copyObjectIfExists(sourceFile.thumbnailKey, thumbnailKey)) ? thumbnailKey : sourceFile.thumbnailKey;
+  }
+  if (sourceFile.audioKey) {
+    const audioKey = storageKey("projects", targetFolder.projectId, "files", id, "audio.mp3");
+    copy.audioKey = (await copyObjectIfExists(sourceFile.audioKey, audioKey)) ? audioKey : sourceFile.audioKey;
+  }
+  if (sourceFile.renditions) {
+    copy.renditions = {};
+    for (const rendition of fileRenditionEntries(sourceFile)) {
+      const renditionKey = storageKey("projects", targetFolder.projectId, "files", id, `proxy-${rendition.quality}.mp4`);
+      copy.renditions[rendition.quality] = {
+        ...rendition,
+        key: (await copyObjectIfExists(rendition.key, renditionKey)) ? renditionKey : rendition.key,
+      };
+    }
+  }
+  return copy;
+}
+
+function toApiFolder(folder, db = null) {
+  return { id: folder.id, name: folder.name, type: "folder", project_id: folder.projectId, parent_id: folder.parentId, created_at: folder.createdAt, system: folder.system || "", archive_protected: db ? isFolderInArchive(db, folder.id) : folder.system === "archive", archive_metadata: db?.folderMetadata?.[folder.id] || null };
+}
+
+function toApiProject(project) {
+  const rules = { ...DEFAULT_PROJECT_RULES, ...(project.rules || {}) };
+  return {
+    id: project.id,
+    name: project.name,
+    root_folder_id: project.root_folder_id,
+    system: project.system || "",
+    rules: {
+      requireDeletePassword: Boolean(rules.requireDeletePassword),
+      deletePassword: String(rules.deletePassword || ""),
+      membersCanUpload: rules.membersCanUpload !== false,
+      membersCanDelete: rules.membersCanDelete !== false,
+      membersCanComment: rules.membersCanComment !== false,
+      membersCanDownload: rules.membersCanDownload !== false,
+      membersCanShare: rules.membersCanShare !== false,
+      retentionDays: normalizeRetentionDays(rules.retentionDays),
+    },
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt || "",
+  };
+}
+
+function toApiFile(file, db = null) {
+  const project = db ? db.projects.find((item) => item.id === file.projectId) : null;
+  const retentionDays = normalizeRetentionDays(project?.rules?.retentionDays);
+  const retentionExpiresAt = retentionDays && file.createdAt
+    ? new Date(Date.parse(file.createdAt) + retentionDays * 24 * 60 * 60 * 1000).toISOString()
+    : "";
   return {
     id: file.id,
     name: file.name,
@@ -569,6 +927,11 @@ function toApiFile(file) {
     updated_at: file.updatedAt,
     owner: file.ownerEmail,
     version: file.version || 1,
+    tags: Array.isArray(file.tags) ? file.tags : [],
+    archive_metadata: file.archiveMetadata || null,
+    archive_protected: db ? isFolderInArchive(db, file.folderId) : false,
+    retention_days: retentionDays,
+    retention_expires_at: retentionExpiresAt,
     thumbnail: file.thumbnailKey ? `/api/accounts/${INTERNAL_ACCOUNT_ID}/files/${file.id}/thumbnail` : "",
   };
 }
@@ -593,6 +956,38 @@ function getFolder(db, id) {
   return folder;
 }
 
+function projectRequiresDeletePassword(project) {
+  return Boolean(project?.rules?.requireDeletePassword);
+}
+
+function isFolderInArchive(db, folderId) {
+  const folder = db.folders.find((item) => item.id === folderId);
+  const project = folder ? db.projects.find((item) => item.id === folder.projectId) : null;
+  return projectRequiresDeletePassword(project);
+}
+
+function archiveDeletePassword() {
+  return String(getSetting("ARCHIVE_DELETE_PASSWORD") || "");
+}
+
+function assertArchiveDeleteAllowed(request, db, folderId) {
+  const folder = db.folders.find((item) => item.id === folderId);
+  const project = folder ? db.projects.find((item) => item.id === folder.projectId) : null;
+  if (!projectRequiresDeletePassword(project)) return;
+  const configured = String(project.rules?.deletePassword || archiveDeletePassword());
+  if (!configured) {
+    const error = new Error("Project delete password is not configured.");
+    error.status = 403;
+    throw error;
+  }
+  const supplied = String(request.body?.archivePassword || request.query?.archivePassword || "");
+  if (supplied !== configured) {
+    const error = new Error("Project delete password is required to delete protected items.");
+    error.status = 403;
+    throw error;
+  }
+}
+
 function getFileRecord(db, id) {
   const file = db.files.find((item) => item.id === id && !item.deletedAt);
   if (!file) {
@@ -607,53 +1002,111 @@ function assertProjectAccess(_user, _projectId) {
   return true;
 }
 
+function assertProjectRuleAllowed(user, project, ruleName, message) {
+  if (user?.role === "admin") return;
+  const rules = { ...DEFAULT_PROJECT_RULES, ...(project?.rules || {}) };
+  if (rules[ruleName] === false) {
+    const error = new Error(message);
+    error.status = 403;
+    throw error;
+  }
+}
+
+function assertFileOwnerOrAdmin(user, file, message) {
+  if (user?.role === "admin") return;
+  if (normalizeEmail(file.ownerEmail) === normalizeEmail(user?.email)) return;
+  const error = new Error(message);
+  error.status = 403;
+  throw error;
+}
+
 async function generateVideoProxy(fileId) {
   const db = await readMediaDb();
   const file = getFileRecord(db, fileId);
   if (!isVideo(file) || !hasR2Config()) return;
   file.proxyStatus = "processing";
+  file.proxyStartedAt = new Date().toISOString();
+  file.proxyError = "";
   await writeMediaDb(db);
   const tempDir = path.join(DATA_DIR, "tmp", file.id);
-  await fs.mkdir(tempDir, { recursive: true });
-  const inputUrl = await signedGetUrl(file.r2Key, "", 60 * 60);
-  const thumbPath = path.join(tempDir, "thumb.jpg");
-  const ffmpegPath = process.env.FFMPEG_PATH || ffmpegInstaller?.path;
-  if (!ffmpegPath) throw new Error("FFmpeg is not available. Set FFMPEG_PATH to generate video proxies on this machine.");
-  file.renditions ||= {};
-  for (const rendition of VIDEO_RENDITIONS) {
-    const outputPath = path.join(tempDir, `${rendition.quality}.mp4`);
-    await new Promise((resolve, reject) => {
-      const scale = `scale='min(${rendition.maxWidth},iw)':-2`;
-      const child = spawn(ffmpegPath, ["-y", "-i", inputUrl, "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", rendition.crf, "-c:a", "aac", "-movflags", "+faststart", outputPath], { windowsHide: true });
-      child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg ${rendition.label} proxy failed with code ${code}`))));
-      child.on("error", reject);
-    });
-    const renditionKey = storageKey("projects", file.projectId, "files", file.id, `proxy-${rendition.quality}.mp4`);
-    await uploadFileToR2(renditionKey, outputPath, "video/mp4");
-    file.renditions[rendition.quality] = { key: renditionKey, label: rendition.label, maxWidth: rendition.maxWidth, contentType: "video/mp4" };
-    if (rendition.quality === "1080") file.proxyKey = renditionKey;
-  }
-  await new Promise((resolve) => {
-    const child = spawn(ffmpegPath, ["-y", "-ss", "00:00:01", "-i", inputUrl, "-frames:v", "1", "-q:v", "3", thumbPath], { windowsHide: true });
-    child.on("close", () => resolve());
-    child.on("error", () => resolve());
-  });
   try {
-    await fs.access(thumbPath);
-    const thumbnailKey = storageKey("projects", file.projectId, "files", file.id, "thumb.jpg");
-    await uploadFileToR2(thumbnailKey, thumbPath, "image/jpeg");
-    file.thumbnailKey = thumbnailKey;
-  } catch {}
-  file.proxyStatus = "ready";
-  file.updatedAt = new Date().toISOString();
-  await writeMediaDb(db);
-  await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fs.mkdir(tempDir, { recursive: true });
+    const inputUrl = await signedGetUrl(file.r2Key, "", 60 * 60);
+    const thumbPath = path.join(tempDir, "thumb.jpg");
+    const ffmpegPath = getFfmpegPath();
+    if (!ffmpegPath) throw new Error("FFmpeg is not available. Set FFMPEG_PATH to generate video proxies on this machine.");
+    file.renditions ||= {};
+    for (const rendition of VIDEO_RENDITIONS) {
+      const outputPath = path.join(tempDir, `${rendition.quality}.mp4`);
+      await new Promise((resolve, reject) => {
+        const scale = `scale='min(${rendition.maxWidth},iw)':-2`;
+        const child = spawn(ffmpegPath, ["-y", "-i", inputUrl, "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", rendition.crf, "-c:a", "aac", "-movflags", "+faststart", outputPath], { windowsHide: true });
+        child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg ${rendition.label} proxy failed with code ${code}`))));
+        child.on("error", reject);
+      });
+      const renditionKey = storageKey("projects", file.projectId, "files", file.id, `proxy-${rendition.quality}.mp4`);
+      await uploadFileToR2(renditionKey, outputPath, "video/mp4");
+      file.renditions[rendition.quality] = { key: renditionKey, label: rendition.label, maxWidth: rendition.maxWidth, contentType: "video/mp4" };
+      if (rendition.quality === "1080") file.proxyKey = renditionKey;
+    }
+    const audioPath = path.join(tempDir, "audio.mp3");
+    await new Promise((resolve) => {
+      const child = spawn(ffmpegPath, ["-y", "-i", inputUrl, "-vn", "-codec:a", "libmp3lame", "-b:a", "192k", audioPath], { windowsHide: true });
+      child.on("close", () => resolve());
+      child.on("error", () => resolve());
+    });
+    try {
+      await fs.access(audioPath);
+      const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
+      await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
+      file.audioKey = audioKey;
+      file.audioStatus = "ready";
+    } catch {
+      file.audioStatus = "not_available";
+    }
+    await new Promise((resolve) => {
+      const child = spawn(ffmpegPath, ["-y", "-ss", "00:00:01", "-i", inputUrl, "-frames:v", "1", "-q:v", "3", thumbPath], { windowsHide: true });
+      child.on("close", () => resolve());
+      child.on("error", () => resolve());
+    });
+    try {
+      await fs.access(thumbPath);
+      const thumbnailKey = storageKey("projects", file.projectId, "files", file.id, "thumb.jpg");
+      await uploadFileToR2(thumbnailKey, thumbPath, "image/jpeg");
+      file.thumbnailKey = thumbnailKey;
+    } catch {}
+    file.proxyStatus = "ready";
+    file.proxyStartedAt = "";
+    file.updatedAt = new Date().toISOString();
+    await writeMediaDb(db);
+  } catch (error) {
+    file.proxyStatus = "failed";
+    file.proxyStartedAt = "";
+    file.proxyError = error.message || "Video processing failed.";
+    file.updatedAt = new Date().toISOString();
+    await writeMediaDb(db);
+    throw error;
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+function normalizeWorkflowAssignees(workflow = {}) {
+  const values = Array.isArray(workflow.assigneeEmails) ? workflow.assigneeEmails : [workflow.assigneeEmail];
+  return Array.from(new Set(values.map((email) => normalizeEmail(email)).filter(Boolean)));
 }
 
 function workflowFor(fileId, workflows, users) {
-  const workflow = workflows[fileId] || { assigneeEmail: "", status: "work_in_progress" };
-  const assignee = users.find((user) => user.email === workflow.assigneeEmail);
-  return { ...workflow, assigneeName: workflow.assigneeName || assignee?.name || "" };
+  const workflow = workflows[fileId] || { assigneeEmails: [], status: "work_in_progress" };
+  const assigneeEmails = normalizeWorkflowAssignees(workflow);
+  const assignees = assigneeEmails.map((email) => users.find((user) => normalizeEmail(user.email) === email)).filter(Boolean);
+  return {
+    ...workflow,
+    assigneeEmail: assigneeEmails[0] || "",
+    assigneeName: assignees[0]?.name || "",
+    assigneeEmails,
+    assigneeNames: assignees.map((user) => user.name || user.email),
+  };
 }
 
 function appOrigin(request) {
@@ -694,7 +1147,8 @@ function mentionedUsers(text, users, actorEmail) {
       .toLowerCase()
       .split(/\s+/)
       .filter(Boolean);
-    return tokens.some((token) => token === email || token === email.split("@")[0] || names.includes(token));
+    const username = cleanUsernamePart(user.username);
+    return tokens.some((token) => token === email || token === email.split("@")[0] || token === username || names.includes(token));
   });
 }
 
@@ -744,7 +1198,7 @@ async function recordActivity(request, action, target = {}, details = {}) {
 
 async function recordNotification(notification) {
   const data = await readJson(NOTIFICATIONS_PATH, [], "notifications.json");
-  const item = { id: crypto.randomUUID(), ...notification, createdAt: new Date().toISOString() };
+  const item = { id: crypto.randomUUID(), ...notification, emailStatus: "not_configured", emailError: "", createdAt: new Date().toISOString() };
   data.unshift(item);
   await writeJson(NOTIFICATIONS_PATH, data.slice(0, 200), "notifications.json");
   const recipients = Array.from(new Set([
@@ -758,12 +1212,25 @@ async function recordNotification(notification) {
       secure: isEnabled(getSetting("SMTP_SECURE")),
       auth: getSetting("SMTP_USER") ? { user: getSetting("SMTP_USER"), pass: getSetting("SMTP_PASS") } : undefined,
     });
-    await transporter.sendMail({
-      from: getSetting("SMTP_FROM") || getSetting("SMTP_USER"),
-      to: recipients.join(","),
-      subject: notification.subject,
-      text: notification.text,
-    }).catch(() => {});
+    try {
+      const info = await transporter.sendMail({
+        from: getSetting("SMTP_FROM") || getSetting("SMTP_USER"),
+        to: recipients.join(","),
+        subject: notification.subject,
+        text: notification.text,
+      });
+      item.emailStatus = "sent";
+      item.emailAccepted = info.accepted || [];
+      item.emailRejected = info.rejected || [];
+    } catch (error) {
+      item.emailStatus = "failed";
+      item.emailError = [error.code, error.command, error.message].filter(Boolean).join(" - ");
+    }
+    await writeJson(NOTIFICATIONS_PATH, data.slice(0, 200), "notifications.json");
+  } else if (recipients.length) {
+    item.emailStatus = "not_configured";
+    item.emailError = "SMTP is not configured.";
+    await writeJson(NOTIFICATIONS_PATH, data.slice(0, 200), "notifications.json");
   }
   return item;
 }
@@ -793,6 +1260,8 @@ function toApiNotification(notification, user) {
     fileId: notification.fileId || "",
     url: notification.url || "",
     status: notification.status || "",
+    emailStatus: notification.emailStatus || "",
+    emailError: notification.emailError || "",
     actor: notification.actor || "",
     createdAt: notification.createdAt,
     readAt: readBy[email] || "",
@@ -873,6 +1342,7 @@ app.get("/api/admin/settings", requireAdminSession, async (_request, response, n
         smtpFrom: getSetting("SMTP_FROM"),
         smtpSecure: isEnabled(getSetting("SMTP_SECURE")),
         notificationRecipients: getSetting("NOTIFICATION_RECIPIENTS"),
+        archiveDeletePassword: archiveDeletePassword(),
       },
     });
   } catch (error) {
@@ -895,6 +1365,7 @@ app.patch("/api/admin/settings", requireAdminSession, async (request, response, 
     assignIfPresent("SMTP_PASS", request.body?.smtpPass);
     assignIfPresent("SMTP_FROM", request.body?.smtpFrom);
     assignIfPresent("NOTIFICATION_RECIPIENTS", request.body?.notificationRecipients);
+    assignIfPresent("ARCHIVE_DELETE_PASSWORD", request.body?.archiveDeletePassword);
     nextSettings.SMTP_SECURE = String(Boolean(request.body?.smtpSecure));
     await writeAppSettings(nextSettings);
     await recordActivity(request, "admin.settings_updated", { type: "settings", id: "admin-settings" }, {
@@ -935,10 +1406,13 @@ app.post("/api/admin/users", requireAdminSession, async (request, response, next
       return;
     }
     const passwordParts = hashPassword(password);
+    const name = String(request.body?.name || email).trim();
     const user = {
       id: crypto.randomUUID(),
       email,
-      name: String(request.body?.name || email).trim(),
+      name,
+      username: uniqueUsername(usernameFromName(name, email), users),
+      usernameManual: false,
       passwordSalt: passwordParts.salt,
       passwordHash: passwordParts.hash,
       role: request.body?.role === "admin" ? "admin" : "member",
@@ -964,6 +1438,15 @@ app.patch("/api/admin/users/:userId", requireAdminSession, async (request, respo
     const previous = publicUser(user);
     const name = String(request.body?.name || "").trim();
     if (name) user.name = name;
+    if (Object.hasOwn(request.body || {}, "username")) {
+      const username = cleanUsernamePart(request.body?.username);
+      if (!username) {
+        response.status(400).json({ error: "Username is required." });
+        return;
+      }
+      user.username = uniqueUsername(username, users, user.id);
+      user.usernameManual = true;
+    }
     if (request.body?.role) {
       const adminCount = users.filter((item) => item.role === "admin").length;
       const nextRole = request.body.role === "admin" ? "admin" : "member";
@@ -975,7 +1458,7 @@ app.patch("/api/admin/users/:userId", requireAdminSession, async (request, respo
     }
     user.updatedAt = new Date().toISOString();
     await writeUsers(users);
-    await recordActivity(request, "admin.user_updated", { type: "user", id: user.id, email: user.email, name: user.name }, { previousRole: previous.role, role: user.role, previousName: previous.name, name: user.name });
+    await recordActivity(request, "admin.user_updated", { type: "user", id: user.id, email: user.email, name: user.name }, { previousRole: previous.role, role: user.role, previousName: previous.name, name: user.name, previousUsername: previous.username, username: user.username });
     response.json({ data: publicUser(user), users: users.map(publicUser) });
   } catch (error) {
     next(error);
@@ -1148,7 +1631,7 @@ app.patch("/auth/app/password", requireAppSession, async (request, response, nex
   try {
     const { currentPassword, newPassword } = request.body || {};
     const users = await readUsers();
-    const user = users.find((item) => item.email === request.appUser.email);
+    const user = users.find((item) => normalizeEmail(item.email) === normalizeEmail(request.appUser.email));
     if (!user || !verifyPassword(currentPassword, user)) {
       response.status(401).json({ error: "Current password is incorrect." });
       return;
@@ -1169,6 +1652,47 @@ app.patch("/auth/app/password", requireAppSession, async (request, response, nex
   }
 });
 
+app.patch("/api/profile", requireAppSession, async (request, response, next) => {
+  try {
+    const users = await readUsers();
+    const user = users.find((item) => normalizeEmail(item.email) === normalizeEmail(request.appUser.email));
+    if (!user) {
+      response.status(404).json({ error: "User not found." });
+      return;
+    }
+    const previous = publicUser(user);
+    const name = String(request.body?.name || "").trim();
+    const email = normalizeEmail(request.body?.email);
+    const avatarUrl = String(request.body?.avatarUrl || "").trim();
+    if (!name) {
+      response.status(400).json({ error: "Name is required." });
+      return;
+    }
+    if (!email) {
+      response.status(400).json({ error: "Email is required." });
+      return;
+    }
+    if (users.some((item) => item.id !== user.id && normalizeEmail(item.email) === email)) {
+      response.status(409).json({ error: "Another member already uses that email." });
+      return;
+    }
+    if (avatarUrl && (!avatarUrl.startsWith("data:image/") || avatarUrl.length > 900000)) {
+      response.status(400).json({ error: "Profile picture must be an image under 650 KB." });
+      return;
+    }
+    user.name = name;
+    user.email = email;
+    if (Object.hasOwn(request.body || {}, "avatarUrl")) user.avatarUrl = avatarUrl;
+    user.updatedAt = new Date().toISOString();
+    await writeUsers(users);
+    await recordActivity(request, "account.profile_updated", { type: "user", id: user.id, email: user.email, name: user.name }, { previousEmail: previous.email, previousName: previous.name });
+    response.setHeader("Set-Cookie", `mediaflow_session=${signSession(user)}; ${cookieOptions()}`);
+    response.json({ data: publicUser(user), user: publicUser(user) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/accounts", async (_request, response) => {
   response.json({ data: [{ id: INTERNAL_ACCOUNT_ID, name: "MediaFlow Storage" }] });
 });
@@ -1180,7 +1704,87 @@ app.get("/api/accounts/:accountId/workspaces", async (_request, response) => {
 app.get("/api/accounts/:accountId/workspaces/:workspaceId/projects", async (request, response, next) => {
   try {
     const db = await readMediaDb();
-    response.json({ data: db.projects.map((project) => ({ ...project, root_folder_id: project.root_folder_id })) });
+    response.json({ data: db.projects.map(toApiProject) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/accounts/:accountId/workspaces/:workspaceId/projects", requireAdminSession, async (request, response, next) => {
+  try {
+    const name = String(request.body?.name || "").trim();
+    if (!name) {
+      response.status(400).json({ error: "Project name is required." });
+      return;
+    }
+    const db = await readMediaDb();
+    const projectId = `project_${crypto.randomUUID()}`;
+    const rootFolderId = `folder_${crypto.randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const project = {
+      id: projectId,
+      name,
+      root_folder_id: rootFolderId,
+      rules: {
+        ...DEFAULT_PROJECT_RULES,
+        requireDeletePassword: Boolean(request.body?.requireDeletePassword),
+        deletePassword: String(request.body?.deletePassword || ""),
+        membersCanUpload: request.body?.membersCanUpload !== false,
+        membersCanDelete: request.body?.membersCanDelete !== false,
+        membersCanComment: request.body?.membersCanComment !== false,
+        membersCanDownload: request.body?.membersCanDownload !== false,
+        membersCanShare: request.body?.membersCanShare !== false,
+        retentionDays: normalizeRetentionDays(request.body?.retentionDays),
+      },
+      createdAt,
+    };
+    const folder = { id: rootFolderId, projectId, parentId: null, name: `${name} root`, system: "project_root", createdAt };
+    db.projects.push(project);
+    db.folders.push(folder);
+    await writeMediaDb(db);
+    await recordActivity(request, "project.created", { type: "project", id: project.id, name: project.name }, { requireDeletePassword: project.rules.requireDeletePassword });
+    response.status(201).json({ data: toApiProject(project), projects: db.projects.map(toApiProject) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/projects/:projectId", requireAdminSession, async (request, response, next) => {
+  try {
+    const db = await readMediaDb();
+    const project = getProject(db, request.params.projectId);
+    const previous = toApiProject(project);
+    if (Object.hasOwn(request.body || {}, "name")) {
+      const name = String(request.body?.name || "").trim();
+      if (!name) {
+        response.status(400).json({ error: "Project name is required." });
+        return;
+      }
+      project.name = name;
+    }
+    project.rules ||= {};
+    if (Object.hasOwn(request.body || {}, "requireDeletePassword")) {
+      project.rules.requireDeletePassword = Boolean(request.body.requireDeletePassword);
+    }
+    if (Object.hasOwn(request.body || {}, "deletePassword")) {
+      project.rules.deletePassword = String(request.body.deletePassword || "");
+      if (project.system === "archive") {
+        await loadAppSettings();
+        appSettings.ARCHIVE_DELETE_PASSWORD = project.rules.deletePassword;
+        await writeAppSettings(appSettings);
+      }
+    }
+    for (const key of ["membersCanUpload", "membersCanDelete", "membersCanComment", "membersCanDownload", "membersCanShare"]) {
+      if (Object.hasOwn(request.body || {}, key)) project.rules[key] = Boolean(request.body[key]);
+    }
+    if (Object.hasOwn(request.body || {}, "retentionDays")) {
+      project.rules.retentionDays = normalizeRetentionDays(request.body.retentionDays);
+    }
+    if (project.system === "archive") project.rules.requireDeletePassword = true;
+    project.updatedAt = new Date().toISOString();
+    await writeMediaDb(db);
+    await recordActivity(request, "project.updated", { type: "project", id: project.id, name: project.name }, { previousName: previous.name, name: project.name, previousRules: previous.rules, rules: project.rules });
+    response.json({ data: toApiProject(project), projects: db.projects.map(toApiProject) });
   } catch (error) {
     next(error);
   }
@@ -1196,7 +1800,7 @@ app.get("/api/accounts/:accountId/projects/:projectId/folders", async (request, 
       .map((folder) => {
         const fileCount = db.files.filter((file) => file.folderId === folder.id && !file.deletedAt).length;
         const childFolderCount = db.folders.filter((child) => child.parentId === folder.id).length;
-        return { ...toApiFolder(folder), file_count: fileCount, folder_count: childFolderCount };
+        return { ...toApiFolder(folder, db), file_count: fileCount, folder_count: childFolderCount };
       });
     response.json({ data: folders });
   } catch (error) {
@@ -1209,8 +1813,8 @@ app.get("/api/accounts/:accountId/folders/:folderId/children", async (request, r
     const db = await readMediaDb();
     const folder = getFolder(db, request.params.folderId);
     assertProjectAccess(request.appUser, folder.projectId);
-    const folders = db.folders.filter((item) => item.parentId === folder.id).map(toApiFolder);
-    const files = db.files.filter((item) => item.folderId === folder.id && !item.deletedAt).map(toApiFile);
+    const folders = db.folders.filter((item) => item.parentId === folder.id).map((item) => toApiFolder(item, db));
+    const files = db.files.filter((item) => item.folderId === folder.id && !item.deletedAt).map((item) => toApiFile(item, db));
     response.json({ data: [...folders, ...files] });
   } catch (error) {
     next(error);
@@ -1227,11 +1831,12 @@ app.post("/api/accounts/:accountId/folders/:folderId/folders", async (request, r
     const db = await readMediaDb();
     const parent = getFolder(db, request.params.folderId);
     assertProjectAccess(request.appUser, parent.projectId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, parent.projectId), "membersCanUpload", "Members cannot create folders in this project.");
     const folder = { id: crypto.randomUUID(), projectId: parent.projectId, parentId: parent.id, name, createdAt: new Date().toISOString() };
     db.folders.push(folder);
     await writeMediaDb(db);
     await recordActivity(request, "folder.created", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId });
-    response.status(201).json({ data: toApiFolder(folder) });
+    response.status(201).json({ data: toApiFolder(folder, db) });
   } catch (error) {
     next(error);
   }
@@ -1252,7 +1857,7 @@ app.patch("/api/accounts/:accountId/folders/:folderId", async (request, response
     folder.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "folder.renamed", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId }, { previousName, newName: folder.name });
-    response.json({ data: toApiFolder(folder) });
+    response.json({ data: toApiFolder(folder, db) });
   } catch (error) {
     next(error);
   }
@@ -1264,10 +1869,12 @@ app.delete("/api/accounts/:accountId/folders/:folderId", async (request, respons
     const folder = getFolder(db, request.params.folderId);
     assertProjectAccess(request.appUser, folder.projectId);
     const project = getProject(db, folder.projectId);
+    assertProjectRuleAllowed(request.appUser, project, "membersCanDelete", "Members cannot delete items in this project.");
     if (project.root_folder_id === folder.id) {
       response.status(400).json({ error: "Cannot delete the project root folder." });
       return;
     }
+    assertArchiveDeleteAllowed(request, db, folder.id);
     const descendantIds = new Set([folder.id]);
     let changed = true;
     while (changed) {
@@ -1282,10 +1889,12 @@ app.delete("/api/accounts/:accountId/folders/:folderId", async (request, respons
     const filesToDelete = db.files.filter((file) => descendantIds.has(file.folderId));
     const deletedFolderCount = descendantIds.size;
     const deletedFileCount = filesToDelete.length;
+    const deletedFileIds = new Set(filesToDelete.map((file) => file.id));
     for (const file of filesToDelete) {
       file.deletedAt = new Date().toISOString();
-      await Promise.all(fileStorageKeys(file).map((key) => deleteObject(key)));
+      await Promise.all(fileStorageKeysForDelete(db, file).map((key) => deleteObject(key)));
     }
+    db.archiveIndex = (db.archiveIndex || []).filter((entry) => !deletedFileIds.has(entry.fileId));
     db.folders = db.folders.filter((item) => !descendantIds.has(item.id));
     await writeMediaDb(db);
     await recordActivity(request, "folder.deleted", { type: "folder", id: folder.id, name: folder.name, projectId: folder.projectId, parentId: folder.parentId }, { deletedFolderCount, deletedFileCount });
@@ -1305,6 +1914,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/files/local-upload", async 
     const db = await readMediaDb();
     const folder = getFolder(db, request.params.folderId);
     assertProjectAccess(request.appUser, folder.projectId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, folder.projectId), "membersCanUpload", "Members cannot upload files in this project.");
     const id = crypto.randomUUID();
     const mimeType = contentType || "application/octet-stream";
     const key = storageKey("projects", folder.projectId, "files", id, "original" + extensionFor(name));
@@ -1330,7 +1940,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/files/local-upload", async 
     await recordActivity(request, "file.upload_started", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
     response.status(201).json({
       data: {
-        ...toApiFile(file),
+        ...toApiFile(file, db),
         upload_urls: [{ url: uploadUrl, size: Number(fileSize) }],
       },
     });
@@ -1354,6 +1964,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/files/multipart-upload", as
     const db = await readMediaDb();
     const folder = getFolder(db, request.params.folderId);
     assertProjectAccess(request.appUser, folder.projectId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, folder.projectId), "membersCanUpload", "Members cannot upload files in this project.");
     const id = crypto.randomUUID();
     const mimeType = contentType || "application/octet-stream";
     const key = storageKey("projects", folder.projectId, "files", id, "original" + extensionFor(name));
@@ -1383,7 +1994,7 @@ app.post("/api/accounts/:accountId/folders/:folderId/files/multipart-upload", as
     db.files.push(file);
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_started", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart", partCount: normalizedPartCount });
-    response.status(201).json({ data: { ...toApiFile(file), uploadId, partUrls: urls } });
+    response.status(201).json({ data: { ...toApiFile(file, db), uploadId, partUrls: urls } });
   } catch (error) {
     next(error);
   }
@@ -1411,7 +2022,7 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
     if (isVideo(file)) generateVideoProxy(file.id).catch(() => {});
-    response.json({ data: toApiFile(file) });
+    response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
   }
@@ -1448,7 +2059,7 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
     if (isVideo(file)) generateVideoProxy(file.id).catch(() => {});
-    response.json({ data: toApiFile(file) });
+    response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
   }
@@ -1466,7 +2077,7 @@ app.post("/api/files/:fileId/thumbnail-upload", async (request, response, next) 
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.thumbnail_updated", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId });
-    response.json({ data: { uploadUrl: await signedPutUrl(thumbnailKey, mimeType), thumbnail: toApiFile(file).thumbnail } });
+    response.json({ data: { uploadUrl: await signedPutUrl(thumbnailKey, mimeType), thumbnail: toApiFile(file, db).thumbnail } });
   } catch (error) {
     next(error);
   }
@@ -1477,7 +2088,7 @@ app.get("/api/accounts/:accountId/files/:fileId", async (request, response, next
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
-    response.json({ data: toApiFile(file) });
+    response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
   }
@@ -1543,14 +2154,29 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
-    const originalUrl = await signedGetUrl(file.r2Key, `attachment; filename="${file.name.replaceAll('"', "'")}"`, 60 * 30);
-    const downloads = [{ key: "original", label: "Original", detail: `${formatBytes(file.size)} source file`, url: originalUrl }];
-    const renditionEntries = fileRenditionEntries(file);
+    assertProjectRuleAllowed(request.appUser, getProject(db, file.projectId), "membersCanDownload", "Members cannot download files from this project.");
+    const downloads = [];
+    const originalExists = await objectExists(file.r2Key);
+    if (originalExists) {
+      const originalUrl = await signedGetUrl(file.r2Key, `attachment; filename="${file.name.replaceAll('"', "'")}"`, 60 * 30);
+      downloads.push({ key: "original", label: "Original full quality", detail: `${formatBytes(file.size)} source file`, url: originalUrl });
+    } else {
+      downloads.push({ key: "original-missing", label: "Original full quality", detail: "Original file is missing from storage", pending: true });
+    }
+    const discoveredRenditions = [];
+    for (const rendition of VIDEO_RENDITIONS) {
+      const metadataKeyForRendition = file.renditions?.[rendition.quality]?.key;
+      const expectedKey = storageKey("projects", file.projectId, "files", file.id, `proxy-${rendition.quality}.mp4`);
+      const key = metadataKeyForRendition || expectedKey;
+      if (await objectExists(key)) discoveredRenditions.push({ ...rendition, key });
+    }
+    const renditionEntries = discoveredRenditions;
+    const ffmpegAvailable = Boolean(getFfmpegPath());
     for (const rendition of renditionEntries) {
       downloads.push({
         key: rendition.quality,
         label: `${rendition.label} MP4`,
-        detail: rendition.quality === "1080" ? "High quality proxy" : "Smaller download",
+        detail: rendition.quality === "1080" ? "Preview quality MP4" : "Lower size MP4",
         url: await signedGetUrl(rendition.key, `attachment; filename="${fileBaseName(file.name)}-${rendition.label}.mp4"`, 60 * 30),
       });
     }
@@ -1562,15 +2188,33 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
         url: await signedGetUrl(file.proxyKey, `attachment; filename="${fileBaseName(file.name)}-proxy.mp4"`, 60 * 30),
       });
     }
-    if (isVideo(file) && !renditionEntries.some((item) => item.quality === "720")) {
+    const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
+    const hasAudioDownload = isVideo(file) && await objectExists(expectedAudioKey);
+    if (hasAudioDownload) {
       downloads.push({
-        key: "processing",
-        label: "Lower sizes",
-        detail: file.proxyStatus === "processing" ? "Generating..." : "Will appear after processing",
+        key: "mp3",
+        label: "MP3 audio",
+        detail: "192 kbps audio",
+        url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
+      });
+    } else if (isVideo(file) && file.audioStatus !== "not_available") {
+      downloads.push({
+        key: "mp3-processing",
+        label: "MP3 audio",
+        detail: !originalExists ? "Original file is missing from storage" : ffmpegAvailable ? (file.proxyStatus === "processing" ? "Generating..." : "Will appear after processing") : "FFmpeg is not configured on this machine",
         pending: true,
       });
     }
-    if (isVideo(file) && hasR2Config() && file.proxyStatus !== "processing" && !renditionEntries.some((item) => item.quality === "720")) generateVideoProxy(file.id).catch(() => {});
+    if (isVideo(file) && !renditionEntries.some((item) => item.quality === "720")) {
+      downloads.push({
+        key: "processing",
+        label: "Lower MP4 sizes",
+        detail: !originalExists ? "Original file is missing from storage" : ffmpegAvailable ? (file.proxyStatus === "processing" ? "Generating..." : "Will appear after processing") : "FFmpeg is not configured on this machine",
+        pending: true,
+      });
+    }
+    const allRenditionsDiscovered = VIDEO_RENDITIONS.every((rendition) => renditionEntries.some((item) => item.quality === rendition.quality));
+    if (originalExists && shouldStartProxyJob(file) && (!allRenditionsDiscovered || !hasAudioDownload)) generateVideoProxy(file.id).catch(() => {});
     response.json({ data: downloads });
   } catch (error) {
     next(error);
@@ -1579,20 +2223,152 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
 
 app.patch("/api/accounts/:accountId/files/:fileId", async (request, response, next) => {
   try {
-    const name = String(request.body?.name || "").trim();
-    if (!name) {
-      response.status(400).json({ error: "file name is required" });
-      return;
-    }
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
     const previousName = file.name;
-    file.name = name;
+    const previousTags = Array.isArray(file.tags) ? file.tags : [];
+    const name = Object.hasOwn(request.body || {}, "name") ? String(request.body?.name || "").trim() : "";
+    if (Object.hasOwn(request.body || {}, "name")) {
+      if (!name) {
+        response.status(400).json({ error: "file name is required" });
+        return;
+      }
+      file.name = name;
+    }
+    if (Object.hasOwn(request.body || {}, "tags")) {
+      if (!isVideo(file)) {
+        response.status(400).json({ error: "Tags can only be added to videos." });
+        return;
+      }
+      file.tags = normalizeTags(request.body.tags);
+    }
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
-    await recordActivity(request, "file.renamed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { previousName, newName: file.name });
-    response.json({ data: toApiFile(file) });
+    if (previousName !== file.name) {
+      await recordActivity(request, "file.renamed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { previousName, newName: file.name });
+    }
+    if (JSON.stringify(previousTags) !== JSON.stringify(file.tags || [])) {
+      await recordActivity(request, "file.tags_updated", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { previousTags, tags: file.tags || [] });
+    }
+    response.json({ data: toApiFile(file, db) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/accounts/:accountId/files/:fileId/move", async (request, response, next) => {
+  try {
+    const targetFolderId = String(request.body?.folderId || "").trim();
+    if (!targetFolderId) {
+      response.status(400).json({ error: "Target folder is required." });
+      return;
+    }
+    const db = await readMediaDb();
+    const file = getFileRecord(db, request.params.fileId);
+    const targetFolder = getFolder(db, targetFolderId);
+    assertProjectAccess(request.appUser, file.projectId);
+    assertProjectAccess(request.appUser, targetFolder.projectId);
+    assertFileOwnerOrAdmin(request.appUser, file, "Members can only move videos they uploaded themselves.");
+    assertProjectRuleAllowed(request.appUser, getProject(db, targetFolder.projectId), "membersCanUpload", "Members cannot move files into this project.");
+    if (file.folderId === targetFolder.id) {
+      response.json({ data: toApiFile(file, db) });
+      return;
+    }
+    const previousProjectId = file.projectId;
+    const previousFolderId = file.folderId;
+    file.projectId = targetFolder.projectId;
+    file.folderId = targetFolder.id;
+    file.updatedAt = new Date().toISOString();
+    await writeMediaDb(db);
+    await recordActivity(request, "file.moved", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { previousProjectId, previousFolderId, projectId: file.projectId, folderId: file.folderId });
+    response.json({ data: toApiFile(file, db) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/accounts/:accountId/files/:fileId/copy", async (request, response, next) => {
+  try {
+    const targetFolderId = String(request.body?.folderId || "").trim();
+    if (!targetFolderId) {
+      response.status(400).json({ error: "Target folder is required." });
+      return;
+    }
+    const db = await readMediaDb();
+    const file = getFileRecord(db, request.params.fileId);
+    const targetFolder = getFolder(db, targetFolderId);
+    assertProjectAccess(request.appUser, file.projectId);
+    assertProjectAccess(request.appUser, targetFolder.projectId);
+    assertFileOwnerOrAdmin(request.appUser, file, "Members can only copy videos they uploaded themselves.");
+    assertProjectRuleAllowed(request.appUser, getProject(db, targetFolder.projectId), "membersCanUpload", "Members cannot copy files into this project.");
+    const copiedFile = await copyFileRecordToFolder(file, targetFolder);
+    db.files.push(copiedFile);
+    await writeMediaDb(db);
+    await recordActivity(request, "file.copied", { type: "file", id: copiedFile.id, name: copiedFile.name, projectId: copiedFile.projectId, folderId: copiedFile.folderId }, { sourceFileId: file.id, sourceProjectId: file.projectId, sourceFolderId: file.folderId });
+    response.status(201).json({ data: toApiFile(copiedFile, db) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/accounts/:accountId/files/:fileId/archive", async (request, response, next) => {
+  try {
+    const db = await readMediaDb();
+    const sourceFile = getFileRecord(db, request.params.fileId);
+    assertProjectAccess(request.appUser, sourceFile.projectId);
+    assertFileOwnerOrAdmin(request.appUser, sourceFile, "Members can only archive videos they uploaded themselves.");
+    const archiveProject = db.projects.find((project) => project.system === "archive" || project.id === ARCHIVE_PROJECT_ID);
+    if (!archiveProject) {
+      response.status(404).json({ error: "Archive project was not found." });
+      return;
+    }
+    ensureArchiveStructure(db, archiveProject);
+    const metadata = normalizeArchiveMetadata(request.body?.metadata || {});
+    const sectionFolder = archiveSectionForMetadata(db, archiveProject, metadata);
+    if (!sectionFolder) {
+      response.status(404).json({ error: "Archive destination was not found." });
+      return;
+    }
+    const yearFolder = ensureFolderRecord(db, archiveProject.id, sectionFolder.id, metadata.year);
+    const storyFolder = ensureFolderRecord(db, archiveProject.id, yearFolder.id, metadata.event);
+    db.folderMetadata ||= {};
+    db.folderMetadata[storyFolder.id] = {
+      ...metadata,
+      updatedAt: new Date().toISOString(),
+      updatedBy: request.appUser.email,
+    };
+    const archivedFile = createArchiveReferenceRecord(sourceFile, storyFolder, metadata);
+    db.files.push(archivedFile);
+    upsertArchiveIndex(db, {
+      id: crypto.randomUUID(),
+      fileId: archivedFile.id,
+      sourceFileId: sourceFile.id,
+      folderId: storyFolder.id,
+      projectId: archiveProject.id,
+      fileName: archivedFile.name,
+      metadata,
+      createdAt: archivedFile.createdAt,
+      createdBy: request.appUser.email,
+      search: archiveSearchText(metadata, archivedFile, storyFolder),
+    });
+    await writeMediaDb(db);
+    await recordActivity(request, "archive.footage_added", { type: "file", id: archivedFile.id, name: archivedFile.name, projectId: archivedFile.projectId, folderId: archivedFile.folderId }, { sourceFileId: sourceFile.id, metadata });
+    response.status(201).json({ data: toApiFile(archivedFile, db), folder: toApiFolder(storyFolder, db), metadata, archiveIndex: db.archiveIndex });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/archive/index", requireAppSession, async (request, response, next) => {
+  try {
+    const db = await readMediaDb();
+    const query = String(request.query.q || "").trim().toLowerCase();
+    const year = String(request.query.year || "").trim();
+    let entries = db.archiveIndex || [];
+    if (query) entries = entries.filter((entry) => String(entry.search || archiveSearchText(entry.metadata || {}, { name: entry.fileName }, null)).includes(query));
+    if (year) entries = entries.filter((entry) => String(entry.metadata?.year || "") === year);
+    response.json({ data: entries.slice(0, 500) });
   } catch (error) {
     next(error);
   }
@@ -1603,8 +2379,12 @@ app.delete("/api/accounts/:accountId/files/:fileId", async (request, response, n
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, file.projectId), "membersCanDelete", "Members cannot delete items in this project.");
+    assertFileOwnerOrAdmin(request.appUser, file, "Members can only delete videos they uploaded themselves.");
+    assertArchiveDeleteAllowed(request, db, file.folderId);
     file.deletedAt = new Date().toISOString();
-    await Promise.all(fileStorageKeys(file).map((key) => deleteObject(key)));
+    await Promise.all(fileStorageKeysForDelete(db, file).map((key) => deleteObject(key)));
+    db.archiveIndex = (db.archiveIndex || []).filter((entry) => entry.fileId !== file.id);
     await writeMediaDb(db);
     await recordActivity(request, "file.deleted", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType });
     response.json({ ok: true });
@@ -1634,6 +2414,7 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, a
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, file.projectId), "membersCanComment", "Members cannot comment on files in this project.");
     const comment = {
       id: crypto.randomUUID(),
       text: String(text).trim(),
@@ -1646,25 +2427,28 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, a
     await recordActivity(request, "comment.created", { type: "comment", id: comment.id, fileId: file.id, fileName: file.name, projectId: file.projectId }, { timestamp: comment.timestamp, textLength: comment.text.length });
     const users = await readUsers();
     const mentions = mentionedUsers(comment.text, users, request.appUser.email);
-    await Promise.all(mentions.map((user) => recordNotification({
+    const actorName = request.appUser.name || request.appUser.email;
+    const actorEmail = request.appUser.email;
+    const url = reviewUrl(request, file.id);
+    response.status(201).json({ data: comment });
+    Promise.all(mentions.map((user) => recordNotification({
       type: "mention",
       to: user.email,
-      subject: `${request.appUser.name || request.appUser.email} mentioned you on ${file.name}`,
+      subject: `${actorName} mentioned you on ${file.name}`,
       text: [
-        `${request.appUser.name || request.appUser.email} mentioned you in a comment.`,
+        `${actorName} mentioned you in a comment.`,
         "",
         `File: ${file.name}`,
         `Timestamp: ${commentTimestamp(comment.timestamp)}`,
         `Comment: ${comment.text}`,
         "",
-        `Open review: ${reviewUrl(request, file.id)}`,
+        `Open review: ${url}`,
       ].join("\n"),
       fileName: file.name,
       fileId: file.id,
-      url: reviewUrl(request, file.id),
-      actor: request.appUser.email,
-    })));
-    response.status(201).json({ data: comment });
+      url,
+      actor: actorEmail,
+    }))).catch(() => {});
   } catch (error) {
     next(error);
   }
@@ -1675,6 +2459,7 @@ app.delete("/api/accounts/:accountId/files/:fileId/comments/:commentId", require
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
     assertProjectAccess(request.appUser, file.projectId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, file.projectId), "membersCanComment", "Members cannot edit comments in this project.");
     const comments = db.comments[file.id] || [];
     const comment = comments.find((item) => item.id === request.params.commentId);
     if (!comment) {
@@ -1725,20 +2510,24 @@ app.get("/api/files/:fileId/workflow", requireAppSession, async (request, respon
 
 app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, response, next) => {
   try {
-    const { assigneeEmail, status } = request.body || {};
-    const normalizedAssignee = normalizeEmail(assigneeEmail);
+    const { assigneeEmail, assigneeEmails, status } = request.body || {};
+    const requestedAssignees = Array.isArray(assigneeEmails) ? assigneeEmails : [assigneeEmail];
+    const normalizedAssignees = Array.from(new Set(requestedAssignees.map((email) => normalizeEmail(email)).filter(Boolean)));
     const normalizedStatus = WORKFLOW_STATUSES.has(status) ? status : "work_in_progress";
     const users = await readUsers();
-    if (normalizedAssignee && !users.some((user) => user.email === normalizedAssignee)) {
+    if (normalizedAssignees.some((email) => !users.some((user) => normalizeEmail(user.email) === email))) {
       response.status(400).json({ error: "Assignee must be an existing member." });
       return;
     }
     const workflows = await readWorkflows();
     const previous = workflows[request.params.fileId] || {};
-    const assignee = normalizedAssignee ? users.find((user) => user.email === normalizedAssignee) : null;
+    const previousAssignees = normalizeWorkflowAssignees(previous);
+    const assignees = normalizedAssignees.map((email) => users.find((user) => normalizeEmail(user.email) === email)).filter(Boolean);
     workflows[request.params.fileId] = {
-      assigneeEmail: normalizedAssignee,
-      assigneeName: assignee?.name || "",
+      assigneeEmail: normalizedAssignees[0] || "",
+      assigneeName: assignees[0]?.name || "",
+      assigneeEmails: normalizedAssignees,
+      assigneeNames: assignees.map((user) => user.name || user.email),
       status: normalizedStatus,
       updatedAt: new Date().toISOString(),
       updatedBy: request.appUser.email,
@@ -1747,13 +2536,13 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
     const dbForActivity = await readMediaDb();
     const workflowFile = getFileRecord(dbForActivity, request.params.fileId);
     await recordActivity(request, "workflow.updated", { type: "file", id: workflowFile.id, name: workflowFile.name, projectId: workflowFile.projectId, folderId: workflowFile.folderId }, {
-      previousAssignee: previous.assigneeEmail,
-      assigneeEmail: normalizedAssignee,
+      previousAssignees,
+      assigneeEmails: normalizedAssignees,
       previousStatus: previous.status,
       status: normalizedStatus,
     });
-    if (assignee && normalizeEmail(previous.assigneeEmail) !== normalizedAssignee) {
-      await recordNotification({
+    const newlyAssigned = assignees.filter((user) => !previousAssignees.includes(normalizeEmail(user.email)));
+    await Promise.all(newlyAssigned.map((assignee) => recordNotification({
         type: "assignment",
         to: assignee.email,
         subject: `You were assigned to ${workflowFile.name}`,
@@ -1770,7 +2559,30 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
         url: reviewUrl(request, workflowFile.id),
         status: normalizedStatus,
         actor: request.appUser.email,
-      });
+      })));
+    if (normalizedStatus === "rejected" && previous.status !== "rejected") {
+      const rejectionRecipients = Array.from(new Set([
+        normalizeEmail(workflowFile.ownerEmail),
+        ...normalizedAssignees,
+      ].filter(Boolean)));
+      await Promise.all(rejectionRecipients.map((email) => recordNotification({
+        type: "rejection",
+        to: email,
+        subject: `${workflowFile.name} was rejected`,
+        text: [
+          `${request.appUser.name || request.appUser.email} marked a file as rejected.`,
+          "",
+          `File: ${workflowFile.name}`,
+          `Status: ${humanStatus(normalizedStatus)}`,
+          "",
+          `Open review: ${reviewUrl(request, workflowFile.id)}`,
+        ].join("\n"),
+        fileName: workflowFile.name,
+        fileId: workflowFile.id,
+        url: reviewUrl(request, workflowFile.id),
+        status: normalizedStatus,
+        actor: request.appUser.email,
+      })));
     }
     response.json({ data: workflowFor(request.params.fileId, workflows, users) });
   } catch (error) {
@@ -1822,6 +2634,7 @@ app.patch("/api/files/:fileId/comment-meta/:commentId", requireAppSession, async
     await writeCommentMeta(files);
     const db = await readMediaDb();
     const file = getFileRecord(db, request.params.fileId);
+    assertProjectRuleAllowed(request.appUser, getProject(db, file.projectId), "membersCanComment", "Members cannot edit comments in this project.");
     const actions = [];
     if (editedText !== undefined) actions.push("comment.edited");
     if (replyText !== undefined) actions.push("comment.replied");
@@ -1838,7 +2651,8 @@ app.patch("/api/files/:fileId/comment-meta/:commentId", requireAppSession, async
 app.post("/api/projects/:projectId/shares", requireAppSession, async (request, response, next) => {
   try {
     const db = await readMediaDb();
-    getProject(db, request.params.projectId);
+    const project = getProject(db, request.params.projectId);
+    assertProjectRuleAllowed(request.appUser, project, "membersCanShare", "Members cannot create share links for this project.");
     const assetIds = Array.isArray(request.body?.assetIds) ? request.body.assetIds : [];
     const password = String(request.body?.password || "").trim();
     const share = {

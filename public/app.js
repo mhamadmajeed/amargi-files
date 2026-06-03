@@ -13,10 +13,20 @@ const elements = {
   closeNotificationsButton: $("#closeNotificationsButton"),
   notificationsList: $("#notificationsList"),
   settingsButton: $("#settingsButton"),
+  closeSettingsButton: $("#closeSettingsButton"),
   sidebar: $("#sidebar"),
+  settingsNav: $(".settingsNav"),
   connectionBadge: $("#connectionBadge"),
   memberBadge: $("#memberBadge"),
   appLogoutButton: $("#appLogoutButton"),
+  settingsStorageGroup: $("#settingsStorageGroup"),
+  profileForm: $("#profileForm"),
+  profileAvatarPreview: $("#profileAvatarPreview"),
+  profileAvatarInput: $("#profileAvatarInput"),
+  profileName: $("#profileName"),
+  profileEmail: $("#profileEmail"),
+  profileUsername: $("#profileUsername"),
+  profileMessage: $("#profileMessage"),
   accountSelect: $("#accountSelect"),
   workspaceSelect: $("#workspaceSelect"),
   projectSelect: $("#projectSelect"),
@@ -31,6 +41,18 @@ const elements = {
   notifySubject: $("#notifySubject"),
   notifyMessage: $("#notifyMessage"),
   adminNotifyMessage: $("#adminNotifyMessage"),
+  projectForm: $("#projectForm"),
+  projectNameInput: $("#projectNameInput"),
+  projectRequireDeletePassword: $("#projectRequireDeletePassword"),
+  projectDeletePassword: $("#projectDeletePassword"),
+  projectRetentionDays: $("#projectRetentionDays"),
+  projectMembersCanUpload: $("#projectMembersCanUpload"),
+  projectMembersCanDelete: $("#projectMembersCanDelete"),
+  projectMembersCanComment: $("#projectMembersCanComment"),
+  projectMembersCanDownload: $("#projectMembersCanDownload"),
+  projectMembersCanShare: $("#projectMembersCanShare"),
+  projectSettingsMessage: $("#projectSettingsMessage"),
+  projectRulesList: $("#projectRulesList"),
   apiSettingsForm: $("#apiSettingsForm"),
   apiSettingsMessage: $("#apiSettingsMessage"),
   r2BackendStatus: $("#r2BackendStatus"),
@@ -72,6 +94,16 @@ const elements = {
   folderList: $("#folderList"),
   dropOverlay: $("#dropOverlay"),
   assetContextMenu: $("#assetContextMenu"),
+  destinationModal: $("#destinationModal"),
+  destinationEyebrow: $("#destinationEyebrow"),
+  destinationTitle: $("#destinationTitle"),
+  destinationCloseButton: $("#destinationCloseButton"),
+  destinationCancelButton: $("#destinationCancelButton"),
+  destinationConfirmButton: $("#destinationConfirmButton"),
+  destinationSearchInput: $("#destinationSearchInput"),
+  destinationProjectList: $("#destinationProjectList"),
+  destinationTree: $("#destinationTree"),
+  destinationPath: $("#destinationPath"),
   emptyState: $("#emptyState"),
   detailView: $("#detailView"),
   videoPlayer: $("#videoPlayer"),
@@ -91,17 +123,25 @@ const elements = {
   closeReviewButton: $("#closeReviewButton"),
   assetTitle: $("#assetTitle"),
   assetMeta: $("#assetMeta"),
+  tagEditor: $("#tagEditor"),
+  tagList: $("#tagList"),
+  tagForm: $("#tagForm"),
+  tagInput: $("#tagInput"),
   assigneeSelect: $("#assigneeSelect"),
   statusSelect: $("#statusSelect"),
   openFrameButton: $("#openFrameButton"),
-  downloadSelect: $("#downloadSelect"),
+  downloadButton: $("#downloadButton"),
+  downloadMenu: $("#downloadMenu"),
+  downloadSelect: $("#downloadButton"),
   renameButton: $("#renameButton"),
   deleteButton: $("#deleteButton"),
   commentsList: $("#commentsList"),
   commentInput: $("#commentInput"),
   commentForm: $("#commentForm"),
+  commentButton: $("#commentButton"),
   commentCount: $("#commentCount"),
   mentionHint: $("#mentionHint"),
+  mentionList: $("#mentionList"),
   mentionSuggestions: $("#mentionSuggestions"),
 };
 
@@ -115,6 +155,7 @@ const state = {
   currentWorkspaceId: "",
   currentProject: null,
   folderTree: [],
+  folderTreeExpanded: new Set(),
   folderStack: [],
   assets: [],
   selectedAsset: null,
@@ -125,6 +166,11 @@ const state = {
   view: localStorage.getItem("mediaflow_view") || "grid",
   commentFilter: "all",
   contextAssetId: "",
+  activeMention: null,
+  mentionIndex: 0,
+  mentionQuery: "",
+  commentPosting: false,
+  destinationPicker: null,
 };
 
 function escapeHtml(value) {
@@ -171,6 +217,28 @@ function initialsFor(value) {
   return String(value || "Member").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "M";
 }
 
+function renderProfileForm() {
+  const user = state.user;
+  if (!user) return;
+  elements.profileName.value = user.name || "";
+  elements.profileEmail.value = user.email || "";
+  elements.profileUsername.value = user.username ? `@${user.username}` : "";
+  elements.profileAvatarPreview.textContent = user.avatarUrl ? "" : initialsFor(user.name || user.email);
+  elements.profileAvatarPreview.style.backgroundImage = user.avatarUrl ? `url("${user.avatarUrl}")` : "";
+  elements.profileAvatarPreview.classList.toggle("hasImage", Boolean(user.avatarUrl));
+}
+
+function showSettingsSection(section = "profile") {
+  const isAdmin = state.user?.role === "admin";
+  const safeSection = (!isAdmin && !["profile", "password"].includes(section)) ? "profile" : section;
+  document.querySelectorAll(".settingsSection").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.settingsPanel === safeSection);
+  });
+  document.querySelectorAll(".settingsNavButton").forEach((button) => {
+    button.classList.toggle("active", button.dataset.settingsSection === safeSection);
+  });
+}
+
 function setAlert(message = "") {
   elements.alert.hidden = !message;
   elements.alert.textContent = message;
@@ -188,8 +256,14 @@ function setSignedIn(user) {
   state.user = user;
   elements.authGate.hidden = Boolean(user);
   document.body.classList.toggle("isAuthed", Boolean(user));
+  const isAdmin = user?.role === "admin";
   elements.memberBadge.textContent = user ? `${user.name || user.email} - ${user.role}` : "Signed out";
-  elements.adminPanel.hidden = user?.role !== "admin";
+  elements.adminPanel.hidden = !isAdmin;
+  elements.settingsStorageGroup.hidden = !isAdmin;
+  document.body.classList.toggle("isAdmin", isAdmin);
+  document.body.classList.toggle("isMember", Boolean(user) && !isAdmin);
+  if (user) renderProfileForm();
+  showSettingsSection(isAdmin ? "members" : "profile");
 }
 
 async function loadSession() {
@@ -295,7 +369,7 @@ async function loadUsers() {
   if (state.user?.role === "admin") {
     renderAdminUsers();
   }
-  elements.assigneeSelect.innerHTML = `<option value="">Unassigned</option>${data.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("")}`;
+  elements.assigneeSelect.innerHTML = data.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("");
   renderMentionSuggestions();
 }
 
@@ -303,9 +377,10 @@ function renderAdminUsers() {
   elements.adminUsersList.innerHTML = state.users.map((user) => {
     const isCurrent = user.email === state.user?.email;
     return `<article class="adminMemberCard" data-id="${escapeHtml(user.id)}">
-      <div class="adminMemberAvatar">${escapeHtml(initialsFor(user.name || user.email))}</div>
+      <div class="adminMemberAvatar ${user.avatarUrl ? "hasImage" : ""}" ${user.avatarUrl ? `style="background-image:url('${escapeHtml(user.avatarUrl)}')"` : ""}>${user.avatarUrl ? "" : escapeHtml(initialsFor(user.name || user.email))}</div>
       <div class="adminMemberInfo">
         <strong>${escapeHtml(user.name || user.email)}</strong>
+        <span class="adminUsername">@${escapeHtml(user.username || "member")}</span>
         <span>${escapeHtml(user.email)}</span>
         <small>${escapeHtml(user.createdAt ? `Joined ${formatDateTime(user.createdAt)}` : "Member")}</small>
       </div>
@@ -315,6 +390,7 @@ function renderAdminUsers() {
       </select>
       <div class="adminMemberActions">
         <button type="button" data-admin-action="rename">Rename</button>
+        <button type="button" data-admin-action="username">Username</button>
         <button type="button" data-admin-action="password">Password</button>
         <button type="button" data-admin-action="notify">Notify</button>
         <button type="button" data-admin-action="delete" ${isCurrent ? "disabled" : ""}>Delete</button>
@@ -326,7 +402,80 @@ function renderAdminUsers() {
 
 function renderMentionSuggestions() {
   if (!elements.mentionSuggestions) return;
-  elements.mentionSuggestions.innerHTML = state.users.map((user) => `<option value="@${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("");
+  elements.mentionSuggestions.innerHTML = state.users.map((user) => `<option value="@${escapeHtml(user.username || user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("");
+  updateMentionHint();
+}
+
+function firstNameFor(user) {
+  return String(user.name || user.email || "").trim().split(/\s+/).find(Boolean) || "";
+}
+
+function activeMentionQuery() {
+  const input = elements.commentInput;
+  const cursor = input.selectionStart ?? input.value.length;
+  const beforeCursor = input.value.slice(0, cursor);
+  const match = beforeCursor.match(/(^|\s)@([A-Za-z]*)$/);
+  if (!match) return null;
+  const query = match[2].toLowerCase();
+  return {
+    query,
+    start: cursor - query.length - 1,
+    end: cursor,
+  };
+}
+
+function mentionMatches(query) {
+  if (!query) return [];
+  return state.users
+    .filter((user) => firstNameFor(user).toLowerCase().startsWith(query))
+    .sort((a, b) => firstNameFor(a).localeCompare(firstNameFor(b), undefined, { sensitivity: "base" }))
+    .slice(0, 8);
+}
+
+function renderMentionList(matches = []) {
+  if (!elements.mentionList) return;
+  if (!matches.length) {
+    elements.mentionList.hidden = true;
+    elements.mentionList.innerHTML = "";
+    return;
+  }
+  elements.mentionList.hidden = false;
+  elements.mentionList.innerHTML = matches.map((user, index) => `
+    <button class="mentionOption ${index === state.mentionIndex ? "active" : ""}" type="button" data-user-id="${escapeHtml(user.id)}">
+      <span class="mentionOptionAvatar">${escapeHtml(initialsFor(user.name || user.email))}</span>
+      <span><strong>${escapeHtml(user.name || user.email)}</strong><small>@${escapeHtml(user.username || user.email)}</small></span>
+    </button>
+  `).join("");
+}
+
+function updateMentionAutocomplete() {
+  const active = activeMentionQuery();
+  state.activeMention = active;
+  if (!active) {
+    state.mentionQuery = "";
+    renderMentionList([]);
+    return [];
+  }
+  if (active.query !== state.mentionQuery) {
+    state.mentionQuery = active.query;
+    state.mentionIndex = 0;
+  }
+  const matches = mentionMatches(active.query);
+  state.mentionIndex = Math.min(state.mentionIndex, Math.max(0, matches.length - 1));
+  renderMentionList(matches);
+  return matches;
+}
+
+function insertMention(user) {
+  if (!state.activeMention || !user) return;
+  const token = `@${user.username || String(user.email || "").split("@")[0]} `;
+  const input = elements.commentInput;
+  input.value = `${input.value.slice(0, state.activeMention.start)}${token}${input.value.slice(state.activeMention.end)}`;
+  const cursor = state.activeMention.start + token.length;
+  input.focus();
+  input.setSelectionRange(cursor, cursor);
+  state.activeMention = null;
+  renderMentionList([]);
   updateMentionHint();
 }
 
@@ -335,16 +484,20 @@ function mentionedUsersInText(text) {
   return state.users.filter((user) => {
     const email = String(user.email || "").toLowerCase();
     const name = String(user.name || "").toLowerCase();
+    const username = String(user.username || "").toLowerCase();
     const first = name.split(/\s+/).find(Boolean) || "";
-    return email && (lower.includes(`@${email}`) || lower.includes(`@${email.split("@")[0]}`) || (first && lower.includes(`@${first}`)));
+    return email && (lower.includes(`@${email}`) || lower.includes(`@${email.split("@")[0]}`) || (username && lower.includes(`@${username}`)) || (first && lower.includes(`@${first}`)));
   });
 }
 
 function updateMentionHint() {
   if (!elements.mentionHint) return;
+  const matches = updateMentionAutocomplete();
   const mentions = mentionedUsersInText(elements.commentInput?.value || "").filter((user) => user.email !== state.user?.email);
   elements.mentionHint.textContent = mentions.length
     ? `Will notify ${mentions.map((user) => user.name || user.email).join(", ")}`
+    : matches.length
+      ? `${matches.length} matching teammate${matches.length === 1 ? "" : "s"}`
     : state.users.length
       ? `Mention teammates with @name or @email`
       : "";
@@ -366,7 +519,7 @@ function renderNotifications() {
       <span class="notificationDot" aria-hidden="true"></span>
       <strong>${escapeHtml(notification.subject)}</strong>
       <small>${escapeHtml(relativeTime(notification.createdAt))}${notification.fileName ? ` - ${escapeHtml(notification.fileName)}` : ""}</small>
-      <span>${escapeHtml(notification.type || "notification")}</span>
+      <span>${escapeHtml(notification.type || "notification")}${notification.emailStatus === "failed" ? ` - Email failed` : notification.emailStatus === "sent" ? ` - Email sent` : ""}</span>
     </button>
   `).join("") || `<p class="muted">No notifications yet.</p>`;
 }
@@ -425,6 +578,10 @@ async function handleAdminMemberAction(event) {
     const name = prompt("Member name", user.name || user.email);
     if (!name?.trim()) return;
     await updateAdminUser(user.id, { name });
+  } else if (action === "username") {
+    const username = prompt("Username", user.username || "");
+    if (!username?.trim()) return;
+    await updateAdminUser(user.id, { username });
   } else if (action === "password") {
     const password = prompt("New password for this member. Minimum 8 characters.");
     if (!password) return;
@@ -454,7 +611,7 @@ async function updateAdminUser(userId, payload) {
   });
   state.users = result.users || state.users.map((user) => (user.id === userId ? result.data : user));
   renderAdminUsers();
-  elements.assigneeSelect.innerHTML = `<option value="">Unassigned</option>${state.users.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("")}`;
+  elements.assigneeSelect.innerHTML = state.users.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("");
   renderMentionSuggestions();
   elements.adminUserMessage.textContent = "Member updated.";
 }
@@ -498,6 +655,66 @@ async function updatePassword(event) {
   }
 }
 
+function readAvatarFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve(state.user?.avatarUrl || "");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Profile picture must be an image."));
+      return;
+    }
+    if (file.size > 650 * 1024) {
+      reject(new Error("Profile picture must be under 650 KB."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read the profile picture."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function updateProfile(event) {
+  event.preventDefault();
+  elements.profileMessage.textContent = "Saving...";
+  try {
+    const avatarUrl = await readAvatarFile(elements.profileAvatarInput.files?.[0]);
+    const result = await api("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: elements.profileName.value,
+        email: elements.profileEmail.value,
+        avatarUrl,
+      }),
+    });
+    state.user = result.user || result.data;
+    elements.profileAvatarInput.value = "";
+    setSignedIn(state.user);
+    await loadUsers();
+    elements.profileMessage.textContent = "Profile saved.";
+  } catch (error) {
+    elements.profileMessage.textContent = error.message;
+  }
+}
+
+async function previewProfileAvatar() {
+  const file = elements.profileAvatarInput.files?.[0];
+  if (!file) return;
+  try {
+    const avatarUrl = await readAvatarFile(file);
+    elements.profileAvatarPreview.textContent = "";
+    elements.profileAvatarPreview.style.backgroundImage = `url("${avatarUrl}")`;
+    elements.profileAvatarPreview.classList.add("hasImage");
+    elements.profileMessage.textContent = "";
+  } catch (error) {
+    elements.profileAvatarInput.value = "";
+    elements.profileMessage.textContent = error.message;
+  }
+}
+
 async function bootStorage() {
   await loadConfig();
   await loadUsers();
@@ -530,12 +747,180 @@ async function loadProjects() {
   state.projects = data;
   elements.projectSelect.disabled = false;
   elements.projectSelect.innerHTML = data.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+  renderProjectRules();
   const savedProject = localStorage.getItem("mediaflow_project");
   state.currentProject = data.find((project) => project.id === savedProject) || data[0] || null;
   if (!state.currentProject) return;
   elements.projectSelect.value = state.currentProject.id;
   elements.workspaceTitle.textContent = state.currentProject.name;
+  await enterDefaultProjectFolder();
+}
+
+function todayFolderNames(date = new Date()) {
+  const monthName = date.toLocaleString("en-US", { month: "long" });
+  return {
+    month: `${String(date.getMonth() + 1).padStart(2, "0")}_${monthName}`,
+    day: String(date.getDate()).padStart(2, "0"),
+  };
+}
+
+function currentMonthFolderId(folders = state.folderTree, project = state.currentProject) {
+  if (!project) return "";
+  const names = todayFolderNames();
+  return folders.find((folder) => folder.parent_id === project.root_folder_id && folder.name === names.month)?.id || "";
+}
+
+function resetFolderTreeExpansion(folders = state.folderTree) {
+  state.folderTreeExpanded = new Set([
+    state.currentProject?.root_folder_id,
+    currentMonthFolderId(folders),
+  ].filter(Boolean));
+}
+
+async function enterDefaultProjectFolder() {
+  if (!state.currentProject) return;
+  const { data } = await api(`/api/accounts/${state.currentAccountId}/projects/${state.currentProject.id}/folders`);
+  const folders = data.sort(assetSort);
+  state.folderTree = folders;
+  resetFolderTreeExpansion(folders);
+  const names = todayFolderNames();
+  const month = folders.find((folder) => folder.parent_id === state.currentProject.root_folder_id && folder.name === names.month);
+  const day = month ? folders.find((folder) => folder.parent_id === month.id && folder.name === names.day) : null;
+  if (month && day) {
+    state.folderStack = [
+      { id: state.currentProject.root_folder_id, name: state.currentProject.name },
+      { id: month.id, name: month.name },
+      { id: day.id, name: day.name },
+    ];
+    localStorage.setItem("mediaflow_folder_stack", JSON.stringify(state.folderStack));
+    await loadFolder({ skipTreeReload: true });
+    return;
+  }
   await enterFolder(state.currentProject.root_folder_id, state.currentProject.name, true);
+}
+
+function renderProjectRules() {
+  if (!elements.projectRulesList) return;
+  elements.projectRulesList.innerHTML = state.projects.map((project) => {
+    const rules = project.rules || {};
+    const isArchive = project.system === "archive";
+    return `<article class="projectRuleCard" data-project-id="${escapeHtml(project.id)}">
+      <div>
+        <strong>${escapeHtml(project.name)}</strong>
+        <span>${isArchive ? "Archive project" : "Project"} - ${rules.requireDeletePassword ? "Delete password required" : "Standard delete rules"}</span>
+      </div>
+      <label>
+        Name
+        <input class="projectRuleName" type="text" value="${escapeHtml(project.name)}" ${isArchive ? "disabled" : ""} />
+      </label>
+      <label class="checkboxLabel">
+        <input class="projectRuleRequirePassword" type="checkbox" ${rules.requireDeletePassword ? "checked" : ""} ${isArchive ? "disabled" : ""} />
+        Require password for deletes
+      </label>
+      <label>
+        Delete password
+        <input class="projectRulePassword" type="text" value="${escapeHtml(rules.deletePassword || "")}" placeholder="No password set" />
+      </label>
+      <label>
+        Retention
+        <select class="projectRuleRetention">
+          <option value="" ${!rules.retentionDays ? "selected" : ""}>Indefinitely</option>
+          <option value="30" ${Number(rules.retentionDays) === 30 ? "selected" : ""}>1 month</option>
+          <option value="60" ${Number(rules.retentionDays) === 60 ? "selected" : ""}>2 months</option>
+          <option value="90" ${Number(rules.retentionDays) === 90 ? "selected" : ""}>3 months</option>
+        </select>
+      </label>
+      <fieldset class="projectPermissionGrid">
+        <legend>Member permissions</legend>
+        <label class="checkboxLabel">
+          <input class="projectRuleCanUpload" type="checkbox" ${rules.membersCanUpload !== false ? "checked" : ""} />
+          Upload and create folders
+        </label>
+        <label class="checkboxLabel">
+          <input class="projectRuleCanDelete" type="checkbox" ${rules.membersCanDelete !== false ? "checked" : ""} />
+          Delete files and folders
+        </label>
+        <label class="checkboxLabel">
+          <input class="projectRuleCanComment" type="checkbox" ${rules.membersCanComment !== false ? "checked" : ""} />
+          Comment and review
+        </label>
+        <label class="checkboxLabel">
+          <input class="projectRuleCanDownload" type="checkbox" ${rules.membersCanDownload !== false ? "checked" : ""} />
+          Download files
+        </label>
+        <label class="checkboxLabel">
+          <input class="projectRuleCanShare" type="checkbox" ${rules.membersCanShare !== false ? "checked" : ""} />
+          Create share links
+        </label>
+      </fieldset>
+      <button class="ghostButton projectRuleSave" type="button">Save rules</button>
+    </article>`;
+  }).join("") || `<p class="muted">No projects yet.</p>`;
+}
+
+async function createProject(event) {
+  event.preventDefault();
+  const name = elements.projectNameInput.value.trim();
+  if (!name) return;
+  elements.projectSettingsMessage.textContent = "Creating...";
+  try {
+    const result = await api(`/api/accounts/${state.currentAccountId}/workspaces/${state.currentWorkspaceId}/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        requireDeletePassword: elements.projectRequireDeletePassword.checked,
+        deletePassword: elements.projectDeletePassword.value,
+        retentionDays: elements.projectRetentionDays.value,
+        membersCanUpload: elements.projectMembersCanUpload.checked,
+        membersCanDelete: elements.projectMembersCanDelete.checked,
+        membersCanComment: elements.projectMembersCanComment.checked,
+        membersCanDownload: elements.projectMembersCanDownload.checked,
+        membersCanShare: elements.projectMembersCanShare.checked,
+      }),
+    });
+    elements.projectForm.reset();
+    state.projects = result.projects || [...state.projects, result.data];
+    renderProjectRules();
+    await loadProjects();
+    elements.projectSettingsMessage.textContent = "Project created.";
+  } catch (error) {
+    elements.projectSettingsMessage.textContent = error.message;
+  }
+}
+
+async function saveProjectRules(event) {
+  const button = event.target.closest(".projectRuleSave");
+  if (!button) return;
+  const card = button.closest(".projectRuleCard");
+  const projectId = card?.dataset.projectId;
+  if (!projectId) return;
+  const project = state.projects.find((item) => item.id === projectId);
+  const payload = {
+    name: card.querySelector(".projectRuleName")?.value || project?.name || "",
+    requireDeletePassword: card.querySelector(".projectRuleRequirePassword")?.checked || project?.system === "archive",
+    deletePassword: card.querySelector(".projectRulePassword")?.value || "",
+    retentionDays: card.querySelector(".projectRuleRetention")?.value || "",
+    membersCanUpload: card.querySelector(".projectRuleCanUpload")?.checked !== false,
+    membersCanDelete: card.querySelector(".projectRuleCanDelete")?.checked !== false,
+    membersCanComment: card.querySelector(".projectRuleCanComment")?.checked !== false,
+    membersCanDownload: card.querySelector(".projectRuleCanDownload")?.checked !== false,
+    membersCanShare: card.querySelector(".projectRuleCanShare")?.checked !== false,
+  };
+  elements.projectSettingsMessage.textContent = "Saving...";
+  try {
+    const result = await api(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    state.projects = result.projects || state.projects.map((item) => (item.id === projectId ? result.data : item));
+    renderProjectRules();
+    await loadProjects();
+    elements.projectSettingsMessage.textContent = "Project rules saved.";
+  } catch (error) {
+    elements.projectSettingsMessage.textContent = error.message;
+  }
 }
 
 async function enterFolder(id, name, reset = false) {
@@ -560,7 +945,7 @@ async function goToFolder(id) {
   await loadFolder();
 }
 
-async function loadFolder() {
+async function loadFolder({ skipTreeReload = false } = {}) {
   const current = state.folderStack[state.folderStack.length - 1];
   if (!current) return;
   elements.folderName.textContent = current.name;
@@ -570,7 +955,8 @@ async function loadFolder() {
   elements.uploadButton.disabled = false;
   const { data } = await api(`/api/accounts/${state.currentAccountId}/folders/${current.id}/children`);
   state.assets = data.sort(assetSort);
-  await loadFolderTree();
+  if (skipTreeReload) renderFolderTree();
+  else await loadFolderTree();
   renderAssets();
 }
 
@@ -588,6 +974,7 @@ function folderTreeIcon() {
 function renderFolderTree() {
   if (!elements.folderTree || !state.currentProject) return;
   const activeId = currentFolder()?.id || "";
+  const currentMonthId = currentMonthFolderId();
   const byParent = new Map();
   for (const folder of state.folderTree) {
     const parentId = folder.parent_id || "root";
@@ -599,16 +986,18 @@ function renderFolderTree() {
     const children = (byParent.get(folder.id) || []).sort(assetSort);
     const isActive = folder.id === activeId;
     const isRoot = folder.id === state.currentProject.root_folder_id;
+    const isCurrentMonth = folder.id === currentMonthId;
+    const isExpanded = isRoot || isCurrentMonth || state.folderTreeExpanded.has(folder.id);
     const count = (folder.folder_count || 0) + (folder.file_count || 0);
     return `<div class="folderTreeNode" style="--depth:${depth}">
       <button class="folderTreeItem ${isActive ? "active" : ""} ${isRoot ? "rootItem" : ""}" type="button" data-folder-id="${escapeHtml(folder.id)}" title="${escapeHtml(folder.name)}">
-        <span class="folderTreeChevron" aria-hidden="true">${children.length ? "&rsaquo;" : ""}</span>
+        <span class="folderTreeChevron" data-folder-toggle="${escapeHtml(folder.id)}" aria-hidden="true">${children.length ? (isExpanded ? "v" : "&gt;") : ""}</span>
         <span class="folderTreeIcon" aria-hidden="true">${folderTreeIcon()}</span>
         <span class="folderTreeName">${escapeHtml(isRoot ? state.currentProject.name : folder.name)}</span>
         ${isActive ? `<span class="folderTreeCheck" aria-hidden="true">&#10003;</span>` : ""}
         ${count ? `<span class="folderTreeCount">${count}</span>` : ""}
       </button>
-      ${children.length ? `<div class="folderTreeChildren">${children.map((child) => renderNode(child, depth + 1)).join("")}</div>` : ""}
+      ${children.length && isExpanded ? `<div class="folderTreeChildren">${children.map((child) => renderNode(child, depth + 1)).join("")}</div>` : ""}
     </div>`;
   };
   elements.folderTree.innerHTML = roots.map((folder) => renderNode(folder)).join("") || `<p class="folderTreeEmpty">No folders yet</p>`;
@@ -634,6 +1023,11 @@ function assetKind(asset) {
   if (mime.startsWith("audio/")) return "audio";
   if (mime.startsWith("image/")) return "image";
   return "file";
+}
+
+function canDeleteAsset(asset) {
+  if (state.user?.role === "admin" || asset.type === "folder") return true;
+  return String(asset.owner || "").toLowerCase() === String(state.user?.email || "").toLowerCase();
 }
 
 function assetIcon(kind) {
@@ -668,6 +1062,7 @@ function renderAssets() {
     const meta = asset.type === "folder" ? `Folder${created ? ` - ${created}` : ""}` : `${asset.mimetype || "File"} - ${formatBytes(asset.filesize || asset.size)}${created ? ` - ${created}` : ""}`;
     const hoverVideo = kind === "video" ? `<video class="assetHoverVideo" muted playsinline preload="auto" data-preview-seconds="6" src="/api/accounts/${state.currentAccountId}/files/${asset.id}/playback"></video><span class="assetHoverProgress" aria-hidden="true"></span>` : "";
     const thumb = asset.thumbnail ? `<img src="${asset.thumbnail}" alt="">${hoverVideo}` : `<span class="assetIcon assetIcon-${kind}">${assetIcon(kind)}</span>${hoverVideo}`;
+    const deleteButton = canDeleteAsset(asset) ? `<button class="deleteAsset iconMiniButton deleteFolderButton" type="button" aria-label="Delete ${escapeHtml(asset.name)}" title="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg></button>` : "";
     return `<article class="assetCard assetCard-${kind}" data-id="${escapeHtml(asset.id)}" data-type="${asset.type}" draggable="true">
       <button class="assetOpen" type="button" title="${escapeHtml(asset.name)}">
         <div class="assetThumb assetThumb-${kind}">${thumb}</div>
@@ -676,7 +1071,7 @@ function renderAssets() {
       </button>
       <div class="assetCardActions">
         <button class="renameAsset iconMiniButton" type="button" aria-label="Rename ${escapeHtml(asset.name)}" title="Rename"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 20 8-8-4-4-8 8-1 5z"/><path d="m14 6 4 4"/><path d="M5 20h14"/></svg></button>
-        <button class="deleteAsset iconMiniButton deleteFolderButton" type="button" aria-label="Delete ${escapeHtml(asset.name)}" title="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg></button>
+        ${deleteButton}
       </div>
     </article>`;
   }).join("");
@@ -864,12 +1259,19 @@ function showAssetContextMenu(event) {
   event.preventDefault();
   state.contextAssetId = asset?.id || "";
   const folder = asset?.type === "folder";
+  const canManageAsset = !asset || canDeleteAsset(asset);
   const items = asset
     ? [
         contextMenuItem("open", folder ? "Open folder" : "Open preview"),
         ...(folder ? [contextMenuItem("uploadHere", "Upload into folder")] : []),
+        ...(!folder && canManageAsset ? [
+          contextMenuItem("moveFile", "Move to folder"),
+          contextMenuItem("moveToArchive", "Move to Archive"),
+          contextMenuItem("copyToArchive", "Copy to Archive"),
+          contextMenuItem("archiveFootage", "Archive footage"),
+        ] : []),
         contextMenuItem("rename", "Rename"),
-        contextMenuItem("delete", "Delete"),
+        ...(canManageAsset ? [contextMenuItem("delete", "Delete")] : []),
       ]
     : [
         contextMenuItem("upload", "Upload files"),
@@ -901,6 +1303,10 @@ async function handleContextMenuAction(event) {
   }
   if (action === "rename") return renameAsset(asset);
   if (action === "delete") return deleteAsset(asset);
+  if (action === "moveFile") return moveFile(asset);
+  if (action === "moveToArchive") return moveFile(asset, { archive: true });
+  if (action === "copyToArchive") return copyFile(asset, { archive: true });
+  if (action === "archiveFootage") return archiveFootage(asset);
 }
 
 async function createFolder() {
@@ -923,10 +1329,225 @@ async function renameAsset(asset) {
   await loadFolder();
 }
 
+async function projectFolders(project) {
+  const { data } = await api(`/api/accounts/${state.currentAccountId}/projects/${project.id}/folders`);
+  return data.sort(assetSort);
+}
+
+function folderPickerLabel(folder, folders, project) {
+  if (folder.id === project.root_folder_id) return project.name;
+  const byId = new Map(folders.map((item) => [item.id, item]));
+  const names = [folder.name];
+  let current = byId.get(folder.parent_id);
+  while (current && current.id !== project.root_folder_id) {
+    names.unshift(current.name);
+    current = byId.get(current.parent_id);
+  }
+  return names.join(" / ");
+}
+
+function destinationFolderPath(project, folder, folders) {
+  return folderPickerLabel(folder, folders, project);
+}
+
+function destinationMatches(project, folder, folders, query) {
+  if (!query) return true;
+  const haystack = `${project.name} ${destinationFolderPath(project, folder, folders)} ${folder.name}`.toLowerCase();
+  return haystack.includes(query.toLowerCase());
+}
+
+function descendantFolders(folder, byParent) {
+  const children = byParent.get(folder.id) || [];
+  return children.flatMap((child) => [child, ...descendantFolders(child, byParent)]);
+}
+
+function folderHasVisibleDescendant(project, folder, folders, byParent, query) {
+  if (!query) return true;
+  if (destinationMatches(project, folder, folders, query)) return true;
+  return descendantFolders(folder, byParent).some((child) => destinationMatches(project, child, folders, query));
+}
+
+function renderDestinationPicker() {
+  const picker = state.destinationPicker;
+  if (!picker) return;
+  const query = elements.destinationSearchInput.value.trim();
+  elements.destinationEyebrow.textContent = picker.mode === "copy" ? "Copy" : "Move";
+  elements.destinationTitle.textContent = `${picker.mode === "copy" ? "Copy" : "Move"} "${picker.asset.name}"`;
+  elements.destinationProjectList.innerHTML = picker.projects.map((project) => {
+    const folders = picker.foldersByProject.get(project.id) || [];
+    const count = query ? folders.filter((folder) => destinationMatches(project, folder, folders, query)).length : folders.length;
+    const active = project.id === picker.selectedProjectId;
+    return `<button class="${active ? "active" : ""}" type="button" data-project-id="${escapeHtml(project.id)}">
+      <strong>${escapeHtml(project.name)}</strong>
+      <span>${count} folder${count === 1 ? "" : "s"}</span>
+    </button>`;
+  }).join("");
+
+  const project = picker.projects.find((item) => item.id === picker.selectedProjectId) || picker.projects[0];
+  const folders = picker.foldersByProject.get(project?.id) || [];
+  const byParent = new Map();
+  for (const folder of folders) {
+    const parent = folder.parent_id || "root";
+    if (!byParent.has(parent)) byParent.set(parent, []);
+    byParent.get(parent).push(folder);
+  }
+  const renderNode = (folder, depth = 0) => {
+    if (!folderHasVisibleDescendant(project, folder, folders, byParent, query)) return "";
+    const children = (byParent.get(folder.id) || []).sort(assetSort);
+    const expanded = query || picker.expanded.has(folder.id) || folder.id === project.root_folder_id;
+    const selected = folder.id === picker.selectedFolderId;
+    const path = destinationFolderPath(project, folder, folders);
+    return `<div class="destinationTreeNode" style="--depth:${depth}">
+      <button class="destinationFolderRow ${selected ? "selected" : ""}" type="button" data-folder-id="${escapeHtml(folder.id)}" title="${escapeHtml(path)}">
+        <span class="destinationFolderToggle" data-toggle-folder="${escapeHtml(folder.id)}">${children.length ? (expanded ? "v" : ">") : ""}</span>
+        <span class="destinationFolderIcon" aria-hidden="true">${folderTreeIcon()}</span>
+        <span class="destinationFolderName">${escapeHtml(folder.id === project.root_folder_id ? project.name : folder.name)}</span>
+        <small>${escapeHtml(path)}</small>
+      </button>
+      ${children.length && expanded ? `<div class="destinationTreeChildren">${children.map((child) => renderNode(child, depth + 1)).join("")}</div>` : ""}
+    </div>`;
+  };
+  const roots = (byParent.get("root") || folders.filter((folder) => folder.id === project?.root_folder_id)).sort(assetSort);
+  elements.destinationTree.innerHTML = roots.map((folder) => renderNode(folder)).join("") || `<p class="destinationEmpty">No matching folders.</p>`;
+  const selectedProject = picker.projects.find((item) => item.id === picker.selectedProjectId);
+  const selectedFolders = picker.foldersByProject.get(picker.selectedProjectId) || [];
+  const selectedFolder = selectedFolders.find((folder) => folder.id === picker.selectedFolderId);
+  elements.destinationPath.textContent = selectedProject && selectedFolder ? destinationFolderPath(selectedProject, selectedFolder, selectedFolders) : "Select a folder";
+  elements.destinationConfirmButton.disabled = !selectedFolder;
+}
+
+async function chooseProjectFolder({ initialProject = null, mode = "move", asset }) {
+  const projects = state.projects.length ? state.projects : (await api(`/api/accounts/${state.currentAccountId}/workspaces/${state.currentWorkspaceId}/projects`)).data;
+  const foldersByProject = new Map();
+  await Promise.all(projects.map(async (project) => {
+    foldersByProject.set(project.id, await projectFolders(project));
+  }));
+  return new Promise((resolve) => {
+    const selectedProject = initialProject || projects.find((project) => project.id === state.currentProject?.id) || projects[0];
+    state.destinationPicker = {
+      asset,
+      mode,
+      projects,
+      foldersByProject,
+      selectedProjectId: selectedProject?.id || "",
+      selectedFolderId: selectedProject?.root_folder_id || "",
+      expanded: new Set([selectedProject?.root_folder_id].filter(Boolean)),
+      resolve,
+    };
+    elements.destinationSearchInput.value = "";
+    elements.destinationModal.hidden = false;
+    document.body.classList.add("destinationModalOpen");
+    renderDestinationPicker();
+    elements.destinationSearchInput.focus();
+  });
+}
+
+function closeDestinationPicker(value = null) {
+  const picker = state.destinationPicker;
+  if (!picker) return;
+  state.destinationPicker = null;
+  elements.destinationModal.hidden = true;
+  document.body.classList.remove("destinationModalOpen");
+  picker.resolve(value);
+}
+
+function selectedDestination() {
+  const picker = state.destinationPicker;
+  if (!picker) return null;
+  const project = picker.projects.find((item) => item.id === picker.selectedProjectId);
+  const folders = picker.foldersByProject.get(project?.id) || [];
+  const folder = folders.find((item) => item.id === picker.selectedFolderId);
+  return project && folder ? { project, folder, path: destinationFolderPath(project, folder, folders) } : null;
+}
+
+function archiveProject() {
+  return state.projects.find((project) => project.system === "archive" || project.name === "Archive");
+}
+
+async function moveFile(asset, { archive = false } = {}) {
+  if (asset.type !== "file") return;
+  const targetProject = archive ? archiveProject() : state.currentProject;
+  if (!targetProject) return setAlert("Target project was not found.");
+  const destination = await chooseProjectFolder({ initialProject: targetProject, mode: "move", asset });
+  if (!destination) return;
+  await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folderId: destination.folder.id }),
+  });
+  if (state.selectedAsset?.id === asset.id) state.selectedAsset = { ...state.selectedAsset, parent_id: destination.folder.id, project_id: destination.project.id };
+  await loadFolder();
+  setAlert(`Moved "${asset.name}" to ${destination.path}.`);
+}
+
+async function copyFile(asset, { archive = false } = {}) {
+  if (asset.type !== "file") return;
+  const targetProject = archive ? archiveProject() : state.currentProject;
+  if (!targetProject) return setAlert("Target project was not found.");
+  const destination = await chooseProjectFolder({ initialProject: targetProject, mode: "copy", asset });
+  if (!destination) return;
+  await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/copy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folderId: destination.folder.id }),
+  });
+  await loadFolder();
+  setAlert(`Copied "${asset.name}" to ${destination.path}.`);
+}
+
+function promptArchiveMetadata(asset) {
+  const today = new Date().toISOString().slice(0, 10);
+  const event = prompt("Archive story/event folder name", asset.name.replace(/\.[^.]+$/, ""));
+  if (!event?.trim()) return null;
+  const date = prompt("Date of footage (YYYY-MM-DD)", today);
+  if (date === null) return null;
+  const country = prompt("Country", "");
+  if (country === null) return null;
+  const regionCity = prompt("Region / City", "");
+  if (regionCity === null) return null;
+  const peopleFeatured = prompt("People featured", "");
+  if (peopleFeatured === null) return null;
+  const organizations = prompt("Organizations", "");
+  if (organizations === null) return null;
+  const keywords = prompt("Keywords / topics", "");
+  if (keywords === null) return null;
+  const source = prompt("Source", "");
+  if (source === null) return null;
+  const rightsLicenseStatus = prompt("Rights / License status", "");
+  if (rightsLicenseStatus === null) return null;
+  const notes = prompt("Notes", "");
+  if (notes === null) return null;
+  const year = (date && /^\d{4}/.test(date)) ? date.slice(0, 4) : String(new Date().getFullYear());
+  return { event, date, country, regionCity, peopleFeatured, organizations, keywords, topic: keywords, source, rightsLicenseStatus, notes, year };
+}
+
+async function archiveFootage(asset) {
+  if (asset.type !== "file") return;
+  const archive = archiveProject();
+  if (!archive) return setAlert("Archive project was not found.");
+  const metadata = promptArchiveMetadata(asset);
+  if (!metadata) return;
+  const { data, folder } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/archive`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  await loadFolder();
+  setAlert(`Archived "${data.name}" to ${archive.name} / ${folder.name}.`);
+}
+
 async function deleteAsset(asset) {
   if (!confirm(`Delete "${asset.name}"?`)) return;
+  const archivePassword = asset.archive_protected
+    ? prompt("This item is in a protected project. Enter the project delete password.")
+    : "";
+  if (asset.archive_protected && !archivePassword) return;
   const url = asset.type === "folder" ? `/api/accounts/${state.currentAccountId}/folders/${asset.id}` : `/api/accounts/${state.currentAccountId}/files/${asset.id}`;
-  await api(url, { method: "DELETE" });
+  await api(url, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ archivePassword }),
+  });
   if (state.selectedAsset?.id === asset.id) closeReview();
   await loadFolder();
 }
@@ -1068,9 +1689,56 @@ function handleFolderBreadcrumbClick(event) {
 }
 
 function handleFolderTreeClick(event) {
+  const toggle = event.target.closest("[data-folder-toggle]");
+  if (toggle) {
+    event.stopPropagation();
+    const folderId = toggle.dataset.folderToggle;
+    if (folderId === state.currentProject?.root_folder_id || folderId === currentMonthFolderId()) return;
+    if (state.folderTreeExpanded.has(folderId)) state.folderTreeExpanded.delete(folderId);
+    else state.folderTreeExpanded.add(folderId);
+    renderFolderTree();
+    return;
+  }
   const button = event.target.closest("button[data-folder-id]");
   if (!button) return;
   goToFolder(button.dataset.folderId);
+}
+
+function handleDestinationProjectClick(event) {
+  const button = event.target.closest("button[data-project-id]");
+  const picker = state.destinationPicker;
+  if (!button || !picker) return;
+  const project = picker.projects.find((item) => item.id === button.dataset.projectId);
+  if (!project) return;
+  picker.selectedProjectId = project.id;
+  picker.selectedFolderId = project.root_folder_id;
+  picker.expanded.add(project.root_folder_id);
+  renderDestinationPicker();
+}
+
+function handleDestinationTreeClick(event) {
+  const picker = state.destinationPicker;
+  if (!picker) return;
+  const toggle = event.target.closest("[data-toggle-folder]");
+  if (toggle) {
+    event.stopPropagation();
+    const folderId = toggle.dataset.toggleFolder;
+    if (picker.expanded.has(folderId)) picker.expanded.delete(folderId);
+    else picker.expanded.add(folderId);
+    renderDestinationPicker();
+    return;
+  }
+  const button = event.target.closest("button[data-folder-id]");
+  if (!button) return;
+  picker.selectedFolderId = button.dataset.folderId;
+  picker.expanded.add(button.dataset.folderId);
+  renderDestinationPicker();
+}
+
+function confirmDestinationPicker() {
+  const destination = selectedDestination();
+  if (!destination) return;
+  closeDestinationPicker(destination);
 }
 
 function setDroppedFiles(files) {
@@ -1234,11 +1902,51 @@ async function selectAsset(asset) {
   elements.reviewProjectTitle.textContent = state.currentProject?.name || "Project";
   elements.reviewFileTitle.textContent = asset.name;
   elements.assetMeta.textContent = `${asset.mimetype || "file"} - ${formatBytes(asset.filesize || asset.size)}`;
+  elements.deleteButton.hidden = !canDeleteAsset(asset);
+  renderTags(asset);
   const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
   elements.videoPlayer.src = playbackUrl;
   elements.videoFallback.hidden = false;
   elements.videoPlayer.load();
   await Promise.all([loadDownloads(asset), loadComments(asset), loadWorkflow(asset)]);
+}
+
+function renderTags(asset = state.selectedAsset) {
+  const isVideoAsset = asset && assetKind(asset) === "video";
+  elements.tagEditor.hidden = !isVideoAsset;
+  if (!isVideoAsset) return;
+  const tags = Array.isArray(asset.tags) ? asset.tags : [];
+  elements.tagList.innerHTML = tags.map((tag) => `
+    <span class="tagPill">${escapeHtml(tag)}<button type="button" data-tag="${escapeHtml(tag)}" aria-label="Remove ${escapeHtml(tag)}">&times;</button></span>
+  `).join("") || `<span class="tagEmpty">No tags yet</span>`;
+}
+
+async function saveTags(tags) {
+  if (!state.selectedAsset) return;
+  const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${state.selectedAsset.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tags }),
+  });
+  state.selectedAsset = { ...state.selectedAsset, ...data };
+  state.assets = state.assets.map((asset) => (asset.id === data.id ? { ...asset, ...data } : asset));
+  renderTags(state.selectedAsset);
+  renderAssets();
+}
+
+async function addTag(event) {
+  event.preventDefault();
+  const tag = elements.tagInput.value.trim();
+  if (!tag || !state.selectedAsset) return;
+  const tags = Array.from(new Set([...(state.selectedAsset.tags || []), tag]));
+  elements.tagInput.value = "";
+  await saveTags(tags);
+}
+
+async function removeTag(event) {
+  const button = event.target.closest("[data-tag]");
+  if (!button || !state.selectedAsset) return;
+  await saveTags((state.selectedAsset.tags || []).filter((tag) => tag !== button.dataset.tag));
 }
 
 function closeReview() {
@@ -1253,39 +1961,57 @@ function closeReview() {
 }
 
 async function loadDownloads(asset) {
-  elements.downloadSelect.disabled = true;
-  elements.downloadSelect.innerHTML = `<option value="">Download</option>`;
+  elements.downloadButton.disabled = true;
+  elements.downloadButton.textContent = "Loading...";
+  elements.downloadMenu.hidden = true;
+  elements.downloadMenu.innerHTML = "";
   const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/downloads`);
-  for (const item of data) {
-    const option = document.createElement("option");
-    option.value = item.url || "";
-    option.disabled = Boolean(item.pending || !item.url);
-    option.textContent = `${item.label} ${item.detail ? `(${item.detail})` : ""}`;
-    elements.downloadSelect.append(option);
-  }
-  elements.downloadSelect.disabled = false;
+  elements.downloadMenu.innerHTML = data.map((item) => `
+    <button class="downloadMenuItem" type="button" data-url="${escapeHtml(item.url || "")}" ${item.pending || !item.url ? "disabled" : ""}>
+      <strong>${escapeHtml(item.label)}</strong>
+      <span>${escapeHtml(item.detail || "")}</span>
+    </button>
+  `).join("");
+  elements.downloadButton.disabled = !data.length;
+  elements.downloadButton.textContent = `Download (${data.length})`;
+}
+
+function toggleDownloadMenu(force) {
+  const shouldOpen = typeof force === "boolean" ? force : elements.downloadMenu.hidden;
+  elements.downloadMenu.hidden = !shouldOpen;
+}
+
+function handleDownloadMenuClick(event) {
+  const item = event.target.closest(".downloadMenuItem");
+  if (!item || item.disabled || !item.dataset.url) return;
+  toggleDownloadMenu(false);
+  location.href = item.dataset.url;
 }
 
 async function loadWorkflow(asset) {
   const { data } = await api(`/api/files/${asset.id}/workflow`);
-  elements.assigneeSelect.value = data.assigneeEmail || "";
+  const selectedEmails = new Set(data.assigneeEmails || (data.assigneeEmail ? [data.assigneeEmail] : []));
+  Array.from(elements.assigneeSelect.options).forEach((option) => {
+    option.selected = selectedEmails.has(option.value);
+  });
   elements.statusSelect.value = data.status || "work_in_progress";
   updateWorkflowAppearance();
 }
 
 async function saveWorkflow() {
   if (!state.selectedAsset) return;
+  const assigneeEmails = Array.from(elements.assigneeSelect.selectedOptions).map((option) => option.value).filter(Boolean);
   await api(`/api/files/${state.selectedAsset.id}/workflow`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assigneeEmail: elements.assigneeSelect.value, status: elements.statusSelect.value }),
+    body: JSON.stringify({ assigneeEmails, status: elements.statusSelect.value }),
   });
   updateWorkflowAppearance();
 }
 
 function updateWorkflowAppearance() {
   const status = elements.statusSelect.value || "work_in_progress";
-  const assigned = Boolean(elements.assigneeSelect.value);
+  const assigned = Array.from(elements.assigneeSelect.selectedOptions).some((option) => option.value);
   elements.statusSelect.closest(".reviewField")?.setAttribute("data-status", status);
   elements.assigneeSelect.closest(".reviewField")?.setAttribute("data-assigned", assigned ? "true" : "false");
 }
@@ -1371,16 +2097,34 @@ function renderCommentMarkers() {
 
 async function addComment(event) {
   event.preventDefault();
-  if (!state.selectedAsset || !elements.commentInput.value.trim()) return;
-  await api(`/api/accounts/${state.currentAccountId}/files/${state.selectedAsset.id}/comments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: elements.commentInput.value, timestamp: elements.videoPlayer.currentTime || 0 }),
-  });
+  const text = elements.commentInput.value.trim();
+  if (!state.selectedAsset || !text || state.commentPosting) return;
+  const asset = state.selectedAsset;
+  const timestamp = elements.videoPlayer.currentTime || 0;
+  state.commentPosting = true;
+  elements.commentButton.disabled = true;
+  elements.commentButton.textContent = "Posting...";
   elements.commentInput.value = "";
+  state.activeMention = null;
+  renderMentionList([]);
   updateMentionHint();
-  await loadComments(state.selectedAsset);
-  await loadNotifications().catch(() => {});
+  try {
+    await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, timestamp }),
+    });
+    await loadComments(asset);
+    await loadNotifications().catch(() => {});
+  } catch (error) {
+    elements.commentInput.value = text;
+    updateMentionHint();
+    setAlert(error.message);
+  } finally {
+    state.commentPosting = false;
+    elements.commentButton.disabled = false;
+    elements.commentButton.textContent = "Post";
+  }
 }
 
 async function handleCommentAction(event) {
@@ -1419,6 +2163,34 @@ async function handleCommentAction(event) {
   renderComments();
 }
 
+function handleMentionListClick(event) {
+  const option = event.target.closest(".mentionOption");
+  if (!option) return;
+  const user = state.users.find((item) => item.id === option.dataset.userId);
+  insertMention(user);
+}
+
+function handleMentionKeydown(event) {
+  if (elements.mentionList.hidden) return;
+  const matches = mentionMatches(state.activeMention?.query || "");
+  if (!matches.length) return;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    state.mentionIndex = (state.mentionIndex + 1) % matches.length;
+    renderMentionList(matches);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    state.mentionIndex = (state.mentionIndex - 1 + matches.length) % matches.length;
+    renderMentionList(matches);
+  } else if (event.key === "Enter" || event.key === "Tab") {
+    event.preventDefault();
+    insertMention(matches[state.mentionIndex]);
+  } else if (event.key === "Escape") {
+    state.activeMention = null;
+    renderMentionList([]);
+  }
+}
+
 async function shareSelectedAsset() {
   if (!state.selectedAsset || !state.currentProject) return;
   const password = prompt("Optional password for this review link. Leave blank for public access.", "");
@@ -1449,6 +2221,17 @@ elements.settingsButton.addEventListener("click", () => {
   elements.sidebar.classList.toggle("open");
   elements.settingsButton.setAttribute("aria-expanded", String(elements.sidebar.classList.contains("open")));
 });
+elements.closeSettingsButton.addEventListener("click", () => {
+  elements.sidebar.classList.remove("open");
+  elements.settingsButton.setAttribute("aria-expanded", "false");
+});
+elements.settingsNav.addEventListener("click", (event) => {
+  const button = event.target.closest(".settingsNavButton");
+  if (!button) return;
+  showSettingsSection(button.dataset.settingsSection);
+});
+elements.profileForm.addEventListener("submit", updateProfile);
+elements.profileAvatarInput.addEventListener("change", previewProfileAvatar);
 elements.apiSettingsForm.addEventListener("submit", saveApiSettings);
 elements.adminUserForm.addEventListener("submit", createUser);
 elements.adminUsersList.addEventListener("click", handleAdminMemberAction);
@@ -1460,7 +2243,10 @@ elements.workspaceSelect.addEventListener("change", async () => { state.currentW
 elements.projectSelect.addEventListener("change", async () => {
   state.currentProject = state.projects.find((project) => project.id === elements.projectSelect.value);
   localStorage.setItem("mediaflow_project", state.currentProject?.id || "");
-  if (state.currentProject) await enterFolder(state.currentProject.root_folder_id, state.currentProject.name, true);
+  if (state.currentProject) {
+    elements.workspaceTitle.textContent = state.currentProject.name;
+    await enterDefaultProjectFolder();
+  }
 });
 elements.refreshButton.addEventListener("click", loadFolder);
 elements.createFolderButton.addEventListener("click", createFolder);
@@ -1468,6 +2254,18 @@ elements.sidebarCreateFolderButton.addEventListener("click", createFolder);
 elements.backFolderButton.addEventListener("click", async () => { if (state.folderStack.length > 1) state.folderStack.pop(); await loadFolder(); });
 elements.folderBreadcrumbs.addEventListener("click", handleFolderBreadcrumbClick);
 elements.folderTree.addEventListener("click", handleFolderTreeClick);
+elements.destinationProjectList.addEventListener("click", handleDestinationProjectClick);
+elements.destinationTree.addEventListener("click", handleDestinationTreeClick);
+elements.destinationSearchInput.addEventListener("input", renderDestinationPicker);
+elements.destinationConfirmButton.addEventListener("click", confirmDestinationPicker);
+elements.destinationCloseButton.addEventListener("click", () => closeDestinationPicker(null));
+elements.destinationCancelButton.addEventListener("click", () => closeDestinationPicker(null));
+elements.destinationModal.addEventListener("click", (event) => {
+  if (event.target === elements.destinationModal) closeDestinationPicker(null);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.destinationPicker) closeDestinationPicker(null);
+});
 elements.fileInput.addEventListener("change", handleFileInputChange);
 elements.uploadForm.addEventListener("submit", uploadFile);
 elements.folderList.addEventListener("click", handleAssetClick);
@@ -1497,10 +2295,10 @@ elements.seekBar.addEventListener("input", () => {
   if (duration) elements.videoPlayer.currentTime = (Number(elements.seekBar.value) / 1000) * duration;
 });
 elements.playbackQualitySelect.addEventListener("change", () => { if (state.selectedAsset) selectAsset(state.selectedAsset); });
-elements.downloadSelect.addEventListener("change", () => {
-  if (!elements.downloadSelect.value) return;
-  location.href = elements.downloadSelect.value;
-  elements.downloadSelect.value = "";
+elements.downloadButton.addEventListener("click", () => toggleDownloadMenu());
+elements.downloadMenu.addEventListener("click", handleDownloadMenuClick);
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".downloadControl")) toggleDownloadMenu(false);
 });
 elements.assigneeSelect.addEventListener("change", () => { updateWorkflowAppearance(); saveWorkflow(); });
 elements.statusSelect.addEventListener("change", () => { updateWorkflowAppearance(); saveWorkflow(); });
@@ -1509,7 +2307,15 @@ elements.renameButton.addEventListener("click", () => state.selectedAsset && ren
 elements.deleteButton.addEventListener("click", () => state.selectedAsset && deleteAsset(state.selectedAsset));
 elements.commentForm.addEventListener("submit", addComment);
 elements.commentInput.addEventListener("input", updateMentionHint);
+elements.commentInput.addEventListener("keydown", handleMentionKeydown);
+elements.commentInput.addEventListener("blur", () => setTimeout(() => renderMentionList([]), 120));
+elements.mentionList.addEventListener("mousedown", (event) => event.preventDefault());
+elements.mentionList.addEventListener("click", handleMentionListClick);
 elements.commentsList.addEventListener("click", handleCommentAction);
+elements.tagForm.addEventListener("submit", addTag);
+elements.tagList.addEventListener("click", removeTag);
+elements.projectForm.addEventListener("submit", createProject);
+elements.projectRulesList.addEventListener("click", saveProjectRules);
 document.querySelectorAll(".commentFilter").forEach((button) => {
   button.addEventListener("click", () => {
     state.commentFilter = button.dataset.commentFilter;
