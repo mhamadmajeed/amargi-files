@@ -781,10 +781,9 @@ function normalizeRetentionDays(value) {
 
 const VIDEO_RENDITIONS = [
   { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23" },
-  { quality: "720", label: "720p", maxWidth: 1280, crf: "24" },
   { quality: "480", label: "480p", maxWidth: 854, crf: "26" },
 ];
-const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "720").split(",").map((item) => item.trim()).filter(Boolean));
+const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "1080,480").split(",").map((item) => item.trim()).filter(Boolean));
 
 function fileBaseName(name = "video") {
   return String(name || "video").replace(/\.[^.]+$/, "").replaceAll('"', "'");
@@ -817,6 +816,24 @@ function shouldStartProxyJob(file) {
 
 function getFfmpegPath() {
   return process.env.FFMPEG_PATH || ffmpegInstaller?.path || "";
+}
+
+// Returns video width in pixels using ffprobe, or 0 on failure
+async function probeVideoWidth(filePath) {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) return 0;
+  const ffprobePath = process.env.FFPROBE_PATH || ffmpegPath.replace(/ffmpeg(\.exe)?$/i, (m, ext) => `ffprobe${ext || ""}`);
+  try {
+    const { execFile } = require("child_process");
+    const output = await new Promise((resolve, reject) => {
+      execFile(ffprobePath, ["-v", "quiet", "-select_streams", "v:0", "-show_entries", "stream=width", "-of", "csv=p=0", filePath], { timeout: 15000 }, (err, stdout) => {
+        if (err) reject(err); else resolve(stdout.trim());
+      });
+    });
+    return parseInt(output, 10) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 function fileStorageKeys(file) {
@@ -1097,6 +1114,17 @@ async function generateVideoProxy(fileId, options = {}) {
     });
     console.log(`[export] Source downloaded, starting transcoding …`);
 
+    // Probe source width — skip 1080p if source is already ≤1920px wide
+    const sourceWidth = await probeVideoWidth(localInput);
+    const effectiveQualities = qualities.filter((r) => {
+      if (r.quality === "1080" && sourceWidth > 0 && sourceWidth <= 1920) {
+        console.log(`[export] Skipping 1080p — source width ${sourceWidth}px is already ≤ 1920px`);
+        file.exportJobs["1080"] = "skipped";
+        return false;
+      }
+      return true;
+    });
+
     const thumbPath = path.join(tempDir, "thumb.jpg");
     if (includeThumbnail && !file.thumbnailKey) {
       await runFfmpeg(["-y", "-ss", "00:00:01", "-i", localInput, "-frames:v", "1", "-q:v", "3", thumbPath], "Thumbnail export").catch(() => {});
@@ -1108,7 +1136,7 @@ async function generateVideoProxy(fileId, options = {}) {
       } catch {}
     }
     file.renditions ||= {};
-    for (const rendition of qualities) {
+    for (const rendition of effectiveQualities) {
       if (file.renditions?.[rendition.quality]?.key && await objectExists(file.renditions[rendition.quality].key)) {
         file.exportJobs[rendition.quality] = "ready";
         continue;
@@ -2140,7 +2168,7 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
-    if (isVideo(file)) generateVideoProxy(file.id, { qualities: ["1080", "720", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file)) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2177,7 +2205,7 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
-    if (isVideo(file)) generateVideoProxy(file.id, { qualities: ["1080", "720", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file)) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2984,7 +3012,7 @@ async function requeuePendingProxies() {
     (async () => {
       for (const f of pending) {
         try {
-          await generateVideoProxy(f.id, { qualities: ["720"], includeAudio: false });
+          await generateVideoProxy(f.id, { qualities: ["480"], includeAudio: false });
         } catch (err) {
           console.error(`[Startup] Proxy failed for ${f.id}:`, err.message);
         }
