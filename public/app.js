@@ -1215,19 +1215,27 @@ function renderComments() {
     const text = meta.editedText || comment.text;
     const replies = (meta.replies || []).map((reply) => `<div class="commentReply">${escapeHtml(reply.text)}</div>`).join("");
     const owner = comment.owner?.name || comment.owner?.email || "Member";
-    const initials = String(owner).split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "M";
+    const initials = initialsFor(owner);
     return `<article class="commentItem ${meta.resolved ? "resolved" : ""}" data-id="${escapeHtml(comment.id)}" data-time="${Number(comment.timestamp) || 0}">
       <span class="commentAvatar" aria-hidden="true">${escapeHtml(initials)}</span>
       <button class="commentJump" type="button">
         <strong>${escapeHtml(owner)} <em>Just now</em></strong>
         <small>#${index + 1}</small>
-        <span>${formatTime(comment.timestamp)}</span>
-        <p>${escapeHtml(text)}</p>
+        <span class="commentBodyLine"><span class="commentTimecode">${formatTime(comment.timestamp)}</span><span class="commentText">${escapeHtml(text)}</span></span>
       </button>
       <div class="commentActions">
-        <button class="commentReplyButton ghostButton" type="button">Reply</button>
-        <button class="commentEdit ghostButton" type="button">Edit</button>
-        <button class="commentResolve ghostButton" type="button">${meta.resolved ? "Reopen" : "Solved"}</button>
+        <button class="commentReplyButton ghostButton" type="button" title="Reply" aria-label="Reply">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+        </button>
+        <button class="commentEdit ghostButton" type="button" title="Edit" aria-label="Edit">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+        <button class="commentResolve ghostButton" type="button" title="${meta.resolved ? "Reopen" : "Solved"}" aria-label="${meta.resolved ? "Reopen" : "Solved"}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>
+        </button>
+        <button class="commentDelete ghostButton" type="button" title="Delete" aria-label="Delete">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        </button>
       </div>
       ${replies}
     </article>`;
@@ -1286,6 +1294,11 @@ async function handleCommentAction(event) {
     body.replyText = text;
   } else if (event.target.closest(".commentResolve")) {
     body.resolved = !state.commentMeta[id]?.resolved;
+  } else if (event.target.closest(".commentDelete")) {
+    if (!confirm("Delete this comment?")) return;
+    await api(`/api/accounts/${state.currentAccountId}/files/${state.selectedAsset.id}/comments/${id}`, { method: "DELETE" });
+    await loadComments(state.selectedAsset);
+    return;
   } else return;
   const { data } = await api(`/api/files/${state.selectedAsset.id}/comment-meta/${id}`, {
     method: "PATCH",

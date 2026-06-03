@@ -1563,6 +1563,36 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, a
   }
 });
 
+app.delete("/api/accounts/:accountId/files/:fileId/comments/:commentId", requireAppSession, async (request, response, next) => {
+  try {
+    const db = await readMediaDb();
+    const file = getFileRecord(db, request.params.fileId);
+    assertProjectAccess(request.appUser, file.projectId);
+    const comments = db.comments[file.id] || [];
+    const comment = comments.find((item) => item.id === request.params.commentId);
+    if (!comment) {
+      response.status(404).json({ error: "Comment not found." });
+      return;
+    }
+    const isOwner = normalizeEmail(comment.owner?.email) === normalizeEmail(request.appUser.email);
+    if (!isOwner && request.appUser.role !== "admin") {
+      response.status(403).json({ error: "Only the comment owner or an admin can delete this comment." });
+      return;
+    }
+    db.comments[file.id] = comments.filter((item) => item.id !== request.params.commentId);
+    await writeMediaDb(db);
+    const meta = await readCommentMeta();
+    if (meta[file.id]?.[request.params.commentId]) {
+      delete meta[file.id][request.params.commentId];
+      await writeCommentMeta(meta);
+    }
+    await recordActivity(request, "comment.deleted", { type: "comment", id: request.params.commentId, fileId: file.id, fileName: file.name, projectId: file.projectId }, { timestamp: comment.timestamp });
+    response.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/workflows/query", requireAppSession, async (request, response, next) => {
   try {
     const fileIds = Array.isArray(request.body?.fileIds) ? request.body.fileIds : [];
