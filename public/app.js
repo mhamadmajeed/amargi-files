@@ -2148,9 +2148,10 @@ async function selectAsset(asset) {
   elements.imagePreview.removeAttribute("src");
   if (kind === "video") {
     const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
+    elements.videoPlayer.removeAttribute("src");
+    elements.videoPlayer.load(); // reset to clear previous video
     elements.videoPlayer.src = playbackUrl;
-    elements.videoFallback.hidden = false;
-    elements.videoPlayer.load();
+    // preload="none" — browser won't fetch until user clicks play
   } else if (kind === "image") {
     elements.imagePreview.onload = () => { elements.videoFallback.hidden = true; };
     elements.imagePreview.onerror = () => {
