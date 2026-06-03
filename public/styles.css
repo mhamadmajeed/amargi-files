@@ -8202,6 +8202,17 @@ body.reviewMode .reviewIconRail,
 body.reviewMode .workflowPanel,
 body.reviewMode .downloadPanel { display: none !important; }
 
+/* 5. Video fills full viewer width — no black gaps on the sides */
+body.reviewMode .viewer video {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  align-self: stretch !important;
+  justify-self: stretch !important;
+}
+
 /* ── Comments panel redesign ── */
 
 /* Header */
