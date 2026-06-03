@@ -552,7 +552,6 @@ async function configureBucketCors(origin) {
       origin,
       getEnvSetting("APP_URL"),
       "https://amargi-files.vercel.app",
-      "https://frameio-uploader.vercel.app",
       "http://localhost:4174",
       "https://localhost:4175",
     ].filter(Boolean)),

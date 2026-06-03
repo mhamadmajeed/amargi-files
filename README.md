@@ -21,7 +21,7 @@ APP_SESSION_SECRET=replace-with-a-long-random-string
 
 Direct browser uploads require CORS on the private R2 bucket. Apply the rules in `r2-cors.json` to the bucket, or use the Cloudflare dashboard:
 
-- Allowed origins: `https://amargi-files.vercel.app`, `https://frameio-uploader.vercel.app`, `http://localhost:4174`, `https://localhost:4175`
+- Allowed origins: `https://amargi-files.vercel.app`, `http://localhost:4174`, `https://localhost:4175`
 - Allowed methods: `GET`, `HEAD`, `PUT`
 - Allowed headers: `*`
 - Exposed headers: `ETag`, `etag`
