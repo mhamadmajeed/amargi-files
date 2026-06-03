@@ -1067,10 +1067,39 @@ async function generateVideoProxy(fileId, options = {}) {
   const tempDir = path.join(DATA_DIR, "tmp", `${file.id}-${crypto.randomUUID()}`);
   try {
     await fs.mkdir(tempDir, { recursive: true });
+
+    // ── Download source file ONCE so all jobs share a local copy ──
     const inputUrl = await signedGetUrl(file.r2Key, "", 60 * 60);
+    const ext = path.extname(file.name || ".mp4") || ".mp4";
+    const localInput = path.join(tempDir, `source${ext}`);
+    console.log(`[export] Downloading source to ${localInput} …`);
+    await new Promise((resolve, reject) => {
+      const https = require("https");
+      const http = require("http");
+      const protocol = inputUrl.startsWith("https") ? https : http;
+      protocol.get(inputUrl, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          // Follow one redirect
+          const redirectProto = res.headers.location.startsWith("https") ? https : http;
+          redirectProto.get(res.headers.location, (res2) => {
+            const dest = require("fs").createWriteStream(localInput);
+            res2.pipe(dest);
+            dest.on("finish", resolve);
+            dest.on("error", reject);
+          }).on("error", reject);
+        } else {
+          const dest = require("fs").createWriteStream(localInput);
+          res.pipe(dest);
+          dest.on("finish", resolve);
+          dest.on("error", reject);
+        }
+      }).on("error", reject);
+    });
+    console.log(`[export] Source downloaded, starting transcoding …`);
+
     const thumbPath = path.join(tempDir, "thumb.jpg");
     if (includeThumbnail && !file.thumbnailKey) {
-      await runFfmpeg(["-y", "-ss", "00:00:01", "-i", inputUrl, "-frames:v", "1", "-q:v", "3", thumbPath], "Thumbnail export").catch(() => {});
+      await runFfmpeg(["-y", "-ss", "00:00:01", "-i", localInput, "-frames:v", "1", "-q:v", "3", thumbPath], "Thumbnail export").catch(() => {});
       try {
         await fs.access(thumbPath);
         const thumbnailKey = storageKey("projects", file.projectId, "files", file.id, "thumb.jpg");
@@ -1086,7 +1115,7 @@ async function generateVideoProxy(fileId, options = {}) {
       }
       const outputPath = path.join(tempDir, `${rendition.quality}.mp4`);
       const scale = `scale='min(${rendition.maxWidth},iw)':-2`;
-      await runFfmpeg(["-y", "-i", inputUrl, "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", rendition.crf, "-c:a", "aac", "-movflags", "+faststart", outputPath], `${rendition.label} MP4 export`);
+      await runFfmpeg(["-y", "-i", localInput, "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", rendition.crf, "-c:a", "aac", "-movflags", "+faststart", outputPath], `${rendition.label} MP4 export`);
       const renditionKey = storageKey("projects", file.projectId, "files", file.id, `proxy-${rendition.quality}.mp4`);
       await uploadFileToR2(renditionKey, outputPath, "video/mp4");
       file.renditions[rendition.quality] = { key: renditionKey, label: rendition.label, maxWidth: rendition.maxWidth, contentType: "video/mp4" };
@@ -1098,7 +1127,7 @@ async function generateVideoProxy(fileId, options = {}) {
     }
     if (includeAudio) {
       const audioPath = path.join(tempDir, "audio.mp3");
-      await runFfmpeg(["-y", "-i", inputUrl, "-vn", "-codec:a", "libmp3lame", "-b:a", "192k", audioPath], "MP3 export");
+      await runFfmpeg(["-y", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "192k", audioPath], "MP3 export");
       await fs.access(audioPath);
       const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
       await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
