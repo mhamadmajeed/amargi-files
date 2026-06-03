@@ -26,6 +26,11 @@ const elements = {
   adminUserForm: $("#adminUserForm"),
   adminUserMessage: $("#adminUserMessage"),
   adminUsersList: $("#adminUsersList"),
+  adminNotifyForm: $("#adminNotifyForm"),
+  notifyUserSelect: $("#notifyUserSelect"),
+  notifySubject: $("#notifySubject"),
+  notifyMessage: $("#notifyMessage"),
+  adminNotifyMessage: $("#adminNotifyMessage"),
   apiSettingsForm: $("#apiSettingsForm"),
   apiSettingsMessage: $("#apiSettingsMessage"),
   r2BackendStatus: $("#r2BackendStatus"),
@@ -288,10 +293,35 @@ async function loadUsers() {
   const { data } = await api("/api/users");
   state.users = data;
   if (state.user?.role === "admin") {
-    elements.adminUsersList.innerHTML = data.map((user) => `<div class="adminUserRow"><strong>${escapeHtml(user.name || user.email)}</strong><span>${escapeHtml(user.email)} - ${escapeHtml(user.role)}</span></div>`).join("");
+    renderAdminUsers();
   }
   elements.assigneeSelect.innerHTML = `<option value="">Unassigned</option>${data.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("")}`;
   renderMentionSuggestions();
+}
+
+function renderAdminUsers() {
+  elements.adminUsersList.innerHTML = state.users.map((user) => {
+    const isCurrent = user.email === state.user?.email;
+    return `<article class="adminMemberCard" data-id="${escapeHtml(user.id)}">
+      <div class="adminMemberAvatar">${escapeHtml(initialsFor(user.name || user.email))}</div>
+      <div class="adminMemberInfo">
+        <strong>${escapeHtml(user.name || user.email)}</strong>
+        <span>${escapeHtml(user.email)}</span>
+        <small>${escapeHtml(user.createdAt ? `Joined ${formatDateTime(user.createdAt)}` : "Member")}</small>
+      </div>
+      <select class="adminRoleSelect" aria-label="Role for ${escapeHtml(user.email)}">
+        <option value="member" ${user.role !== "admin" ? "selected" : ""}>Member</option>
+        <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+      </select>
+      <div class="adminMemberActions">
+        <button type="button" data-admin-action="rename">Rename</button>
+        <button type="button" data-admin-action="password">Password</button>
+        <button type="button" data-admin-action="notify">Notify</button>
+        <button type="button" data-admin-action="delete" ${isCurrent ? "disabled" : ""}>Delete</button>
+      </div>
+    </article>`;
+  }).join("") || `<p class="muted">No members yet.</p>`;
+  elements.notifyUserSelect.innerHTML = state.users.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.name || user.email)} (${escapeHtml(user.email)})</option>`).join("");
 }
 
 function renderMentionSuggestions() {
@@ -377,6 +407,75 @@ async function createUser(event) {
     await loadUsers();
   } catch (error) {
     elements.adminUserMessage.textContent = error.message;
+  }
+}
+
+async function handleAdminMemberAction(event) {
+  const card = event.target.closest(".adminMemberCard");
+  if (!card) return;
+  const user = state.users.find((item) => item.id === card.dataset.id);
+  if (!user) return;
+  if (event.target.matches(".adminRoleSelect")) {
+    await updateAdminUser(user.id, { role: event.target.value });
+    return;
+  }
+  const action = event.target.closest("[data-admin-action]")?.dataset.adminAction;
+  if (!action) return;
+  if (action === "rename") {
+    const name = prompt("Member name", user.name || user.email);
+    if (!name?.trim()) return;
+    await updateAdminUser(user.id, { name });
+  } else if (action === "password") {
+    const password = prompt("New password for this member. Minimum 8 characters.");
+    if (!password) return;
+    await api(`/api/admin/users/${user.id}/password`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    elements.adminUserMessage.textContent = `Password reset for ${user.email}.`;
+  } else if (action === "notify") {
+    elements.notifyUserSelect.value = user.id;
+    elements.notifySubject.focus();
+  } else if (action === "delete") {
+    if (!confirm(`Delete ${user.email}? This removes their login access.`)) return;
+    const result = await api(`/api/admin/users/${user.id}`, { method: "DELETE" });
+    state.users = result.users || state.users.filter((item) => item.id !== user.id);
+    renderAdminUsers();
+    elements.adminUserMessage.textContent = `Deleted ${user.email}.`;
+  }
+}
+
+async function updateAdminUser(userId, payload) {
+  const result = await api(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  state.users = result.users || state.users.map((user) => (user.id === userId ? result.data : user));
+  renderAdminUsers();
+  elements.assigneeSelect.innerHTML = `<option value="">Unassigned</option>${state.users.map((user) => `<option value="${escapeHtml(user.email)}">${escapeHtml(user.name || user.email)}</option>`).join("")}`;
+  renderMentionSuggestions();
+  elements.adminUserMessage.textContent = "Member updated.";
+}
+
+async function sendMemberNotification(event) {
+  event.preventDefault();
+  const userId = elements.notifyUserSelect.value;
+  if (!userId) return;
+  elements.adminNotifyMessage.textContent = "Sending...";
+  try {
+    await api(`/api/admin/users/${userId}/notifications`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject: elements.notifySubject.value, message: elements.notifyMessage.value }),
+    });
+    elements.notifySubject.value = "";
+    elements.notifyMessage.value = "";
+    elements.adminNotifyMessage.textContent = "Notification sent.";
+    await loadNotifications().catch(() => {});
+  } catch (error) {
+    elements.adminNotifyMessage.textContent = error.message;
   }
 }
 
@@ -1341,6 +1440,9 @@ elements.settingsButton.addEventListener("click", () => {
 });
 elements.apiSettingsForm.addEventListener("submit", saveApiSettings);
 elements.adminUserForm.addEventListener("submit", createUser);
+elements.adminUsersList.addEventListener("click", handleAdminMemberAction);
+elements.adminUsersList.addEventListener("change", handleAdminMemberAction);
+elements.adminNotifyForm.addEventListener("submit", sendMemberNotification);
 elements.passwordForm.addEventListener("submit", updatePassword);
 elements.accountSelect.addEventListener("change", async () => { state.currentAccountId = elements.accountSelect.value; await loadWorkspaces(); });
 elements.workspaceSelect.addEventListener("change", async () => { state.currentWorkspaceId = elements.workspaceSelect.value; await loadProjects(); });

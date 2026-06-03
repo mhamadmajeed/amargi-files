@@ -155,7 +155,27 @@
             <button id="createUserButton" class="primaryButton" type="submit">Create user</button>
             <div id="adminUserMessage" class="muted"></div>
           </form>
+          <div class="settingsGroupHeader">
+            <p class="eyebrow">Members</p>
+            <strong>Manage access</strong>
+          </div>
           <div class="adminUsersList" id="adminUsersList"></div>
+          <form id="adminNotifyForm" class="adminUserForm adminNotifyForm">
+            <label>
+              Notify member
+              <select id="notifyUserSelect"></select>
+            </label>
+            <label>
+              Subject
+              <input id="notifySubject" type="text" autocomplete="off" placeholder="Review update" />
+            </label>
+            <label class="fullField">
+              Message
+              <textarea id="notifyMessage" rows="3" placeholder="Write a short notification..." required></textarea>
+            </label>
+            <button id="sendMemberNotificationButton" class="primaryButton" type="submit">Send notification</button>
+            <div id="adminNotifyMessage" class="muted"></div>
+          </form>
 
           <div class="settingsGroupHeader">
             <p class="eyebrow">Cloudflare R2</p>

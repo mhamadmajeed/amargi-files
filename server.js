@@ -953,6 +953,113 @@ app.post("/api/admin/users", requireAdminSession, async (request, response, next
   }
 });
 
+app.patch("/api/admin/users/:userId", requireAdminSession, async (request, response, next) => {
+  try {
+    const users = await readUsers();
+    const user = users.find((item) => item.id === request.params.userId);
+    if (!user) {
+      response.status(404).json({ error: "User not found." });
+      return;
+    }
+    const previous = publicUser(user);
+    const name = String(request.body?.name || "").trim();
+    if (name) user.name = name;
+    if (request.body?.role) {
+      const adminCount = users.filter((item) => item.role === "admin").length;
+      const nextRole = request.body.role === "admin" ? "admin" : "member";
+      if (user.role === "admin" && nextRole !== "admin" && adminCount <= 1) {
+        response.status(400).json({ error: "At least one admin account is required." });
+        return;
+      }
+      user.role = nextRole;
+    }
+    user.updatedAt = new Date().toISOString();
+    await writeUsers(users);
+    await recordActivity(request, "admin.user_updated", { type: "user", id: user.id, email: user.email, name: user.name }, { previousRole: previous.role, role: user.role, previousName: previous.name, name: user.name });
+    response.json({ data: publicUser(user), users: users.map(publicUser) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/admin/users/:userId/password", requireAdminSession, async (request, response, next) => {
+  try {
+    const password = String(request.body?.password || "");
+    if (password.length < 8) {
+      response.status(400).json({ error: "Password must be at least 8 characters." });
+      return;
+    }
+    const users = await readUsers();
+    const user = users.find((item) => item.id === request.params.userId);
+    if (!user) {
+      response.status(404).json({ error: "User not found." });
+      return;
+    }
+    const passwordParts = hashPassword(password);
+    user.passwordSalt = passwordParts.salt;
+    user.passwordHash = passwordParts.hash;
+    user.passwordUpdatedAt = new Date().toISOString();
+    await writeUsers(users);
+    await recordActivity(request, "admin.user_password_reset", { type: "user", id: user.id, email: user.email, name: user.name });
+    response.json({ data: publicUser(user) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/users/:userId", requireAdminSession, async (request, response, next) => {
+  try {
+    const users = await readUsers();
+    const user = users.find((item) => item.id === request.params.userId);
+    if (!user) {
+      response.status(404).json({ error: "User not found." });
+      return;
+    }
+    if (normalizeEmail(user.email) === normalizeEmail(request.appUser.email)) {
+      response.status(400).json({ error: "You cannot delete your own account." });
+      return;
+    }
+    if (user.role === "admin" && users.filter((item) => item.role === "admin").length <= 1) {
+      response.status(400).json({ error: "At least one admin account is required." });
+      return;
+    }
+    const nextUsers = users.filter((item) => item.id !== user.id);
+    await writeUsers(nextUsers);
+    await recordActivity(request, "admin.user_deleted", { type: "user", id: user.id, email: user.email, name: user.name }, { role: user.role });
+    response.json({ ok: true, users: nextUsers.map(publicUser) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/users/:userId/notifications", requireAdminSession, async (request, response, next) => {
+  try {
+    const users = await readUsers();
+    const user = users.find((item) => item.id === request.params.userId);
+    if (!user) {
+      response.status(404).json({ error: "User not found." });
+      return;
+    }
+    const subject = String(request.body?.subject || "Admin notification").trim();
+    const message = String(request.body?.message || "").trim();
+    if (!message) {
+      response.status(400).json({ error: "Notification message is required." });
+      return;
+    }
+    const notification = await recordNotification({
+      type: "admin",
+      to: user.email,
+      subject,
+      text: message,
+      actor: request.appUser.email,
+    });
+    await recordActivity(request, "admin.user_notified", { type: "user", id: user.id, email: user.email, name: user.name }, { subject });
+    response.status(201).json({ data: notification });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/users", requireAppSession, async (_request, response, next) => {
   try {
     const users = await readUsers();

@@ -6710,3 +6710,111 @@ body.reviewMode .commentItem .commentJump .commentText {
   margin: 0;
   padding: 0;
 }
+
+.adminUsersList {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.adminMemberCard {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #252c3d;
+  border-radius: 10px;
+  background: #111722;
+}
+
+.adminMemberAvatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: #202a3d;
+  color: #dfe6f6;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.adminMemberInfo {
+  min-width: 0;
+}
+
+.adminMemberInfo strong,
+.adminMemberInfo span,
+.adminMemberInfo small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminMemberInfo strong {
+  color: #f5f7fb;
+  font-size: 0.88rem;
+}
+
+.adminMemberInfo span {
+  color: #aab3c6;
+  font-size: 0.76rem;
+}
+
+.adminMemberInfo small {
+  color: #788294;
+  font-size: 0.68rem;
+}
+
+.adminRoleSelect {
+  grid-column: 1 / -1;
+  min-height: 36px;
+}
+
+.adminMemberActions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.adminMemberActions button {
+  min-height: 32px;
+  border: 1px solid #2a3143;
+  border-radius: 8px;
+  background: #0f141d;
+  color: #c7cfdf;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.adminMemberActions button:hover {
+  border-color: #4c5875;
+  background: #1b2231;
+  color: #fff;
+}
+
+.adminMemberActions button[data-admin-action="delete"] {
+  color: #ffb4b4;
+}
+
+.adminMemberActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.adminNotifyForm {
+  margin-top: 12px;
+}
+
+.adminNotifyForm .fullField {
+  grid-column: 1 / -1;
+}
+
+.adminNotifyForm textarea {
+  width: 100%;
+  min-height: 86px;
+  resize: vertical;
+}
