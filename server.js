@@ -1114,12 +1114,12 @@ async function generateVideoProxy(fileId, options = {}) {
     });
     console.log(`[export] Source downloaded, starting transcoding …`);
 
-    // Probe source width — skip 1080p if source is already ≤1920px wide
+    // Probe source width — skip any rendition whose target is >= source (no point creating same-res file)
     const sourceWidth = await probeVideoWidth(localInput);
     const effectiveQualities = qualities.filter((r) => {
-      if (r.quality === "1080" && sourceWidth > 0 && sourceWidth <= 1920) {
-        console.log(`[export] Skipping 1080p — source width ${sourceWidth}px is already ≤ 1920px`);
-        file.exportJobs["1080"] = "skipped";
+      if (sourceWidth > 0 && r.maxWidth >= sourceWidth) {
+        console.log(`[export] Skipping ${r.label} — source width ${sourceWidth}px is already ≤ ${r.maxWidth}px`);
+        file.exportJobs[r.quality] = "skipped";
         return false;
       }
       return true;
@@ -2341,6 +2341,8 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
     if (isVideo(file)) {
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = file.exportJobs?.[rendition.quality] || "";
+        // Skip renditions that were skipped because source resolution is too low
+        if (status === "skipped") continue;
         downloads.push({
           key: `prepare-${rendition.quality}`,
           label: `${rendition.label} MP4`,
