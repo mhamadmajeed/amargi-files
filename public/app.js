@@ -2311,7 +2311,6 @@ function toggleDownloadMenu(force) {
 async function handleDownloadMenuClick(event) {
   const item = event.target.closest(".downloadMenuItem");
   if (!item || item.disabled) return;
-  }
   if (!item.dataset.url) return;
   toggleDownloadMenu(false);
   location.href = item.dataset.url;
