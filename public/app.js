@@ -161,6 +161,7 @@ const state = {
   folderStack: [],
   assets: [],
   selectedAsset: null,
+  pendingPlaybackUrl: null,
   comments: [],
   commentMeta: {},
   notifications: [],
@@ -2156,8 +2157,8 @@ async function selectAsset(asset) {
     const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
     elements.videoPlayer.removeAttribute("src");
     elements.videoPlayer.load(); // reset to clear previous video
-    elements.videoPlayer.src = playbackUrl;
-    // preload="none" — browser won't fetch until user clicks play
+    state.pendingPlaybackUrl = playbackUrl;
+    // src is set on first play click — prevents loading before user requests it
   } else if (kind === "image") {
     elements.imagePreview.onload = () => { elements.videoFallback.hidden = true; };
     elements.imagePreview.onerror = () => {
@@ -2596,9 +2597,17 @@ elements.listViewButton.addEventListener("click", () => { state.view = "list"; l
 elements.closeReviewButton.addEventListener("click", closeReview);
 elements.reviewHomeButton?.addEventListener("click", closeReview);
 elements.reviewBackButton.addEventListener("click", closeReview);
-elements.centerPlayButton.addEventListener("click", () => { elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause(); });
-elements.videoPlayer.addEventListener("click", () => { elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause(); });
-elements.playPauseButton.addEventListener("click", () => { elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause(); });
+function triggerPlay() {
+  // Set src on first play so the browser never fetches until the user asks
+  if (state.pendingPlaybackUrl && !elements.videoPlayer.src) {
+    elements.videoPlayer.src = state.pendingPlaybackUrl;
+    state.pendingPlaybackUrl = null;
+  }
+  elements.videoPlayer.paused ? elements.videoPlayer.play() : elements.videoPlayer.pause();
+}
+elements.centerPlayButton.addEventListener("click", triggerPlay);
+elements.videoPlayer.addEventListener("click", triggerPlay);
+elements.playPauseButton.addEventListener("click", triggerPlay);
 elements.videoPlayer.addEventListener("play", () => {
   document.body.classList.add("isPlayingVideo");
   elements.playPauseButton.textContent = "Pause";
