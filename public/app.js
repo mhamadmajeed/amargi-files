@@ -2381,27 +2381,38 @@ function renderComments() {
     const owner = comment.owner?.name || comment.owner?.email || "Member";
     const initials = initialsFor(owner);
     return `<article class="commentItem ${meta.resolved ? "resolved" : ""}" data-id="${escapeHtml(comment.id)}" data-time="${Number(comment.timestamp) || 0}">
-      <span class="commentAvatar" aria-hidden="true">${escapeHtml(initials)}</span>
-      <button class="commentJump" type="button">
-        <strong>${escapeHtml(owner)} <em>Just now</em></strong>
-        <small>#${index + 1}</small>
-        <span class="commentBodyLine"><span class="commentTimecode">${formatTime(comment.timestamp)}</span><span class="commentText">${escapeHtml(text)}</span></span>
-      </button>
-      <div class="commentActions">
-        <button class="commentReplyButton ghostButton" type="button" title="Reply" aria-label="Reply">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+      <div class="commentCard">
+        <div class="commentCardHeader">
+          <span class="commentAvatar" aria-hidden="true">${escapeHtml(initials)}</span>
+          <div class="commentCardMeta">
+            <span class="commentOwner">${escapeHtml(owner)}</span>
+            <span class="commentAge">Just now</span>
+          </div>
+          <div class="commentCardBadge">
+            <span class="commentNumber">#${index + 1}</span>
+            <svg class="commentPublicIcon" viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+        </div>
+        <button class="commentJump commentCardBody" type="button">
+          <span class="commentTimecode">${formatTime(comment.timestamp)}</span>
+          <span class="commentText">${escapeHtml(text)}</span>
         </button>
-        <button class="commentEdit ghostButton" type="button" title="Edit" aria-label="Edit">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-        </button>
-        <button class="commentResolve ghostButton" type="button" title="${meta.resolved ? "Reopen" : "Solved"}" aria-label="${meta.resolved ? "Reopen" : "Solved"}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>
-        </button>
-        <button class="commentDelete ghostButton" type="button" title="Delete" aria-label="Delete">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-        </button>
+        <div class="commentCardFooter">
+          <button class="commentReplyButton commentReplyText" type="button">Reply</button>
+          <div class="commentActions">
+            <button class="commentEdit ghostButton" type="button" title="Edit" aria-label="Edit">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="commentResolve ghostButton" type="button" title="${meta.resolved ? "Reopen" : "Solved"}" aria-label="${meta.resolved ? "Reopen" : "Solved"}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>
+            </button>
+            <button class="commentDelete ghostButton" type="button" title="Delete" aria-label="Delete">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
+          </div>
+        </div>
+        ${replies}
       </div>
-      ${replies}
     </article>`;
   }).join("") || `<p class="muted">No comments yet.</p>`;
 }
@@ -2538,6 +2549,8 @@ function updatePlayerUi() {
   elements.durationLabel.textContent = formatTime(duration);
   elements.commentForm.dataset.time = formatTime(current);
   elements.seekBar.value = duration ? Math.round((current / duration) * 1000) : 0;
+  const stamp = document.getElementById("commentTimecodeStamp");
+  if (stamp) stamp.textContent = formatTime(current);
 }
 
 elements.authForm.addEventListener("submit", handleLogin);

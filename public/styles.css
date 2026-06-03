@@ -8201,3 +8201,334 @@ body.reviewMode .assetTools,
 body.reviewMode .reviewIconRail,
 body.reviewMode .workflowPanel,
 body.reviewMode .downloadPanel { display: none !important; }
+
+/* ── Comments panel redesign ── */
+
+/* Header */
+body.reviewMode .commentsPanelHeader {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 16px 12px !important;
+  border-bottom: 1px solid #1a2233 !important;
+  flex-shrink: 0 !important;
+}
+body.reviewMode .commentsPanelHeaderLeft {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+body.reviewMode .commentFilterDropdown {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  background: none !important;
+  border: none !important;
+  color: #e8edf7 !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+}
+body.reviewMode .commentFilterDropdown svg { stroke: #8494ae; stroke-width: 2.5; fill: none; }
+body.reviewMode .commentsPanelHeaderRight {
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+body.reviewMode .commentHeaderIcon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: none !important;
+  color: #6b7a93 !important;
+  cursor: pointer !important;
+  transition: color 0.15s, background 0.15s !important;
+}
+body.reviewMode .commentHeaderIcon svg { stroke: currentColor; stroke-width: 2; fill: none; }
+body.reviewMode .commentHeaderIcon:hover { background: #161e2e !important; color: #b8c4d8 !important; }
+
+/* Comments list */
+body.reviewMode .commentsList {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  overflow-y: auto !important;
+  flex: 1 !important;
+  padding: 8px 10px !important;
+}
+body.reviewMode .commentItem {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 0 6px !important;
+}
+
+/* Card */
+body.reviewMode .commentCard {
+  background: #131b2a !important;
+  border: 1px solid #1c2638 !important;
+  border-radius: 12px !important;
+  padding: 12px 14px 10px !important;
+  transition: border-color 0.15s !important;
+}
+body.reviewMode .commentCard:hover { border-color: #263044 !important; }
+body.reviewMode .commentItem.resolved .commentCard { opacity: 0.5 !important; }
+
+/* Card header row: avatar + name + badge */
+body.reviewMode .commentCardHeader {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  margin-bottom: 9px !important;
+}
+body.reviewMode .commentAvatar {
+  flex-shrink: 0 !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 50% !important;
+  background: #19c065 !important;
+  color: #fff !important;
+  font-size: 0.7rem !important;
+  font-weight: 800 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-transform: uppercase !important;
+}
+body.reviewMode .commentCardMeta {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+}
+body.reviewMode .commentOwner {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #dde4f2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+body.reviewMode .commentAge {
+  font-size: 0.74rem !important;
+  color: #5c6b82 !important;
+  white-space: nowrap !important;
+}
+body.reviewMode .commentCardBadge {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex-shrink: 0 !important;
+}
+body.reviewMode .commentNumber {
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
+  color: #6b7a93 !important;
+}
+body.reviewMode .commentPublicIcon {
+  stroke: #6b7a93 !important;
+  stroke-width: 1.5 !important;
+  fill: none !important;
+}
+
+/* Card body: timecode pill + text */
+body.reviewMode .commentCardBody {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  width: 100% !important;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  margin-bottom: 10px !important;
+}
+body.reviewMode .commentTimecode {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 2px 8px !important;
+  border-radius: 5px !important;
+  background: #4a3500 !important;
+  color: #f5b800 !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: 0.02em !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+body.reviewMode .commentText {
+  font-size: 0.83rem !important;
+  color: #c5cedf !important;
+  line-height: 1.45 !important;
+}
+
+/* Card footer: reply + action icons */
+body.reviewMode .commentCardFooter {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+body.reviewMode .commentReplyText {
+  background: none !important;
+  border: none !important;
+  color: #5e6e87 !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: color 0.15s !important;
+}
+body.reviewMode .commentReplyText:hover { color: #a8b5cc !important; }
+body.reviewMode .commentActions {
+  display: none !important;
+  gap: 2px !important;
+}
+body.reviewMode .commentCard:hover .commentActions { display: flex !important; }
+body.reviewMode .commentActions .ghostButton {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 26px !important;
+  height: 26px !important;
+  border: none !important;
+  border-radius: 5px !important;
+  background: none !important;
+  color: #5c6b82 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+}
+body.reviewMode .commentActions .ghostButton svg { stroke: currentColor; stroke-width: 1.8; fill: none; width: 14px; height: 14px; }
+body.reviewMode .commentActions .ghostButton:hover { background: #1e2c40 !important; color: #b0bdcf !important; }
+
+/* Replies */
+body.reviewMode .commentReply {
+  margin-top: 8px !important;
+  padding: 7px 10px !important;
+  border-left: 2px solid #263044 !important;
+  border-radius: 0 6px 6px 0 !important;
+  background: #0e1620 !important;
+  font-size: 0.8rem !important;
+  color: #8494ae !important;
+}
+
+/* ── Comment form redesign ── */
+body.reviewMode .commentForm {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  border-top: 1px solid #1a2233 !important;
+  background: #0e1520 !important;
+  padding: 10px 12px 12px !important;
+  flex-shrink: 0 !important;
+}
+body.reviewMode .commentFormTop {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
+  margin-bottom: 8px !important;
+}
+body.reviewMode .commentTimecodeStamp {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 3px 9px !important;
+  border-radius: 6px !important;
+  background: #4a3500 !important;
+  color: #f5b800 !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  margin-top: 4px !important;
+}
+body.reviewMode #commentInput {
+  flex: 1 !important;
+  background: none !important;
+  border: none !important;
+  outline: none !important;
+  color: #c5cedf !important;
+  font-size: 0.84rem !important;
+  resize: none !important;
+  min-height: 22px !important;
+  max-height: 120px !important;
+  line-height: 1.5 !important;
+  padding: 3px 0 !important;
+}
+body.reviewMode #commentInput::placeholder { color: #4a566a !important; }
+
+body.reviewMode .commentFormBottom {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+body.reviewMode .commentFormTools {
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+body.reviewMode .commentToolBtn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: none !important;
+  color: #5c6b82 !important;
+  cursor: pointer !important;
+  transition: color 0.15s, background 0.15s !important;
+}
+body.reviewMode .commentToolBtn svg { stroke: currentColor; stroke-width: 1.8; fill: none; }
+body.reviewMode .commentToolBtn:hover { background: #161e2e !important; color: #b0bdcf !important; }
+
+body.reviewMode .commentFormActions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+body.reviewMode .commentVisibilityBtn {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 5px 10px !important;
+  border: 1px solid #1e2c40 !important;
+  border-radius: 7px !important;
+  background: none !important;
+  color: #8494ae !important;
+  font-size: 0.76rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s, color 0.15s !important;
+}
+body.reviewMode .commentVisibilityBtn svg { stroke: currentColor; stroke-width: 1.8; fill: none; }
+body.reviewMode .commentVisibilityBtn:hover { border-color: #2e3f58 !important; color: #b8c4d8 !important; }
+
+body.reviewMode .commentSendBtn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  background: #4d45e8 !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  transition: background 0.15s !important;
+  flex-shrink: 0 !important;
+}
+body.reviewMode .commentSendBtn svg { stroke: #fff; stroke-width: 2; fill: none; }
+body.reviewMode .commentSendBtn:hover { background: #5e57f0 !important; }
+
+/* Hide old paneHeader inside commentsPanel */
+body.reviewMode .commentsPanel .paneHeader { display: none !important; }

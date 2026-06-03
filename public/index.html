@@ -508,22 +508,62 @@
 
               <aside class="reviewSide">
                 <section class="commentsPanel">
-                  <div class="paneHeader">
-                    <strong>Comments</strong>
-                    <div class="commentHeaderTools">
-                      <button class="commentFilter active" type="button" data-comment-filter="all">All</button>
-                      <button class="commentFilter" type="button" data-comment-filter="open">Open</button>
-                      <button class="commentFilter" type="button" data-comment-filter="resolved">Solved</button>
-                      <span id="commentCount">0</span>
+                  <div class="commentsPanelHeader">
+                    <div class="commentsPanelHeaderLeft">
+                      <button class="commentFilterDropdown" type="button" id="commentFilterLabel">
+                        All comments <svg viewBox="0 0 16 16" aria-hidden="true" width="12" height="12"><path d="M4 6l4 4 4-4"/></svg>
+                      </button>
+                    </div>
+                    <div class="commentsPanelHeaderRight">
+                      <button class="commentHeaderIcon" type="button" data-comment-filter="all" title="All comments">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                      </button>
+                      <button class="commentHeaderIcon" type="button" data-comment-filter="open" title="Open">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                      </button>
+                      <button class="commentHeaderIcon commentFilter active" type="button" data-comment-filter="all" title="Search">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                      </button>
+                      <button class="commentHeaderIcon" type="button" title="More">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                      </button>
                     </div>
                   </div>
                   <div id="commentsList" class="commentsList"></div>
                   <form id="commentForm" class="commentForm">
-                    <textarea id="commentInput" rows="3" placeholder="Write a comment"></textarea>
+                    <div class="commentFormTop">
+                      <span id="commentTimecodeStamp" class="commentTimecodeStamp">00:00:00:00</span>
+                      <textarea id="commentInput" rows="1" placeholder="Leave your comment..."></textarea>
+                    </div>
                     <datalist id="mentionSuggestions"></datalist>
                     <div id="mentionList" class="mentionList" hidden></div>
                     <small id="mentionHint" class="mentionHint"></small>
-                    <button id="commentButton" class="primaryButton" type="submit">Post</button>
+                    <div class="commentFormBottom">
+                      <div class="commentFormTools">
+                        <button class="commentToolBtn" type="button" title="Playback speed">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="M12 8v4l-2 2"/><path d="M9 3 3 9"/></svg>
+                        </button>
+                        <button class="commentToolBtn" type="button" title="Attach file">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                        <button class="commentToolBtn" type="button" title="Emoji">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                        </button>
+                        <button class="commentToolBtn" type="button" title="Screen annotation">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72m2.54-15.38c-3.72 4.35-8.94 5.66-16.88 5.85m19.5 1.9c-3.5-.93-6.63-.82-8.94 0-2.58.92-5.01 2.86-7.44 6.32"/></svg>
+                        </button>
+                      </div>
+                      <div class="commentFormActions">
+                        <button class="commentVisibilityBtn" type="button">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                          Public
+                          <svg viewBox="0 0 16 16" aria-hidden="true" width="10" height="10"><path d="M4 6l4 4 4-4"/></svg>
+                        </button>
+                        <button id="commentButton" class="commentSendBtn" type="submit" aria-label="Post comment">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                        </button>
+                      </div>
+                    </div>
                   </form>
                 </section>
               </aside>
