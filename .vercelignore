@@ -1,0 +1,7 @@
+.data
+node_modules
+.env
+.env.local
+.server-*.log
+localhost+*.pem
+mkcert.exe
