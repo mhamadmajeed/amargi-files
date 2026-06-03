@@ -8074,6 +8074,66 @@ body.reviewMode .reviewTopbar {
 body.reviewMode .reviewMain {
   grid-column: 1 !important;
   grid-row: 2 !important;
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  min-height: 0 !important;
+}
+
+/* Viewer: video fills 1fr, controls row is auto (never clipped) */
+body.reviewMode .viewer {
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  min-height: 0 !important;
+}
+
+/* Controls: two-row layout — seekbar on top, buttons on bottom */
+body.reviewMode .playerControls {
+  display: grid !important;
+  grid-template-columns: 42px auto minmax(0, 1fr) auto auto !important;
+  grid-template-rows: 22px 42px !important;
+  align-items: center !important;
+  gap: 6px 12px !important;
+  min-height: 78px !important;
+  padding: 6px 16px 12px !important;
+  background: #000 !important;
+  border-top: 0 !important;
+  flex-shrink: 0 !important;
+}
+body.reviewMode .seekTrack {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+  min-height: 22px !important;
+}
+body.reviewMode .seekBar {
+  display: block !important;
+  width: 100% !important;
+  height: 4px !important;
+  accent-color: #645bff !important;
+}
+body.reviewMode .playerButton {
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 999px !important;
+}
+body.reviewMode #currentTimeLabel {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+}
+body.reviewMode #durationLabel {
+  grid-column: 4 !important;
+  grid-row: 2 !important;
+  justify-self: end !important;
+}
+body.reviewMode .qualitySelect {
+  grid-column: 5 !important;
+  grid-row: 2 !important;
+  width: 88px !important;
+  min-width: 88px !important;
+  min-height: 36px !important;
+}
 }
 body.reviewMode .reviewSide {
   grid-column: 2 !important;
