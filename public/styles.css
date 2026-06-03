@@ -6962,6 +6962,117 @@ body.reviewMode .reviewMain > .assetTools {
   flex: 0 0 auto;
 }
 
+body.reviewMode .reviewMain > .downloadPanel {
+  display: none;
+}
+
+body.reviewMode .assetTools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+  max-height: none;
+  overflow: visible;
+  border-top: 1px solid #171d29;
+  background: #090d14;
+  padding: 10px 14px;
+}
+
+body.reviewMode .assetToolsLeft {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+body.reviewMode .assetIdentity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+body.reviewMode .assetIdentity .eyebrow,
+body.reviewMode #tagEditor {
+  display: none;
+}
+
+body.reviewMode .assetTools h2 {
+  max-width: min(42vw, 520px);
+  overflow: hidden;
+  color: #f6f8fc;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.reviewMode #assetMeta {
+  color: #8d98aa;
+  font-size: 0.7rem;
+}
+
+body.reviewMode .toolButtons {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+body.reviewMode .toolButtons .ghostButton,
+body.reviewMode .toolButtons .dangerButton,
+body.reviewMode .downloadSelect,
+body.reviewMode #closeReviewButton {
+  min-height: 36px;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 0.76rem;
+}
+
+body.reviewMode .downloadControl {
+  position: relative;
+}
+
+body.reviewMode .downloadSelect::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-right: 2px solid #9da8ff;
+  border-bottom: 2px solid #9da8ff;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+body.reviewMode .downloadMenu {
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(280px, 76vw);
+  max-height: 320px;
+  overflow-y: auto;
+  border-color: #283247;
+  border-radius: 12px;
+  background: #0c111a;
+  padding: 6px;
+}
+
+body.reviewMode .downloadMenuItem {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 8px 9px;
+}
+
+body.reviewMode .downloadMenuItem strong {
+  font-size: 0.76rem;
+}
+
+body.reviewMode .downloadMenuItem span {
+  font-size: 0.66rem;
+}
+
 @media (max-width: 900px) {
   body.reviewMode .detailView {
     grid-template-columns: 52px minmax(0, 1fr);

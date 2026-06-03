@@ -2156,7 +2156,7 @@ async function selectAsset(asset) {
     elements.imagePreview.onload = () => { elements.videoFallback.hidden = true; };
     elements.imagePreview.onerror = () => {
       elements.imagePreview.hidden = true;
-      elements.videoFallback.textContent = "Image preview could not be loaded. Use the download options below.";
+    elements.videoFallback.textContent = "Image preview could not be loaded. Use the Download menu.";
       elements.videoFallback.hidden = false;
     };
     elements.imagePreview.src = `/api/accounts/${state.currentAccountId}/files/${asset.id}/preview`;
@@ -2165,7 +2165,7 @@ async function selectAsset(asset) {
     elements.durationLabel.textContent = "Image";
     elements.seekBar.value = 0;
   } else {
-    elements.videoFallback.textContent = "Preview is not available for this file type. Use the download options below.";
+    elements.videoFallback.textContent = "Preview is not available for this file type. Use the Download menu.";
     elements.videoFallback.hidden = false;
   }
   await Promise.all([loadDownloads(asset), loadComments(asset), loadWorkflow(asset)]);
@@ -2240,10 +2240,12 @@ async function loadDownloads(asset) {
     elements.downloadMenu.innerHTML = markup;
     renderDownloadPanel(items);
     elements.downloadButton.disabled = !items.length;
-    elements.downloadButton.textContent = `Download options (${items.length})`;
-    elements.downloadMenu.hidden = false;
+    elements.downloadButton.textContent = items.length ? `Download (${items.length})` : "No downloads";
+    elements.downloadMenu.hidden = true;
   } catch (error) {
     elements.downloadButton.textContent = "Downloads unavailable";
+    elements.downloadButton.disabled = true;
+    elements.downloadMenu.hidden = true;
     renderDownloadPanel([], error.message || "Download options could not be loaded.");
   }
 }
