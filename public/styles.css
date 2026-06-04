@@ -8081,11 +8081,12 @@ body.reviewMode .reviewMain {
 
 /* Viewer: fills full reviewMain width and height, zero margins */
 body.reviewMode .viewer {
-  display: grid !important;
-  grid-template-rows: minmax(0, 1fr) auto !important;
+  display: flex !important;
+  flex-direction: column !important;
   width: 100% !important;
   min-width: 0 !important;
   min-height: 0 !important;
+  overflow: hidden !important;
   margin: 0 !important;
   padding: 0 !important;
   align-self: stretch !important;
@@ -8233,15 +8234,17 @@ body.reviewMode .reviewIconRail,
 body.reviewMode .workflowPanel,
 body.reviewMode .downloadPanel { display: none !important; }
 
-/* 5. Video fills full viewer width — no black gaps on the sides */
+/* 5. Video fills full viewer width — aspect-ratio set dynamically from JS */
 body.reviewMode .viewer video {
   width: 100% !important;
-  height: 100% !important;
+  height: auto !important;
   max-width: 100% !important;
   max-height: 100% !important;
-  object-fit: contain !important;
-  align-self: stretch !important;
-  justify-self: stretch !important;
+  object-fit: fill !important;   /* aspect-ratio is set correctly so fill = no distortion */
+  display: block !important;
+  flex-shrink: 1 !important;
+  flex-grow: 1 !important;
+  align-self: flex-start !important;
 }
 
 /* ── Comments panel redesign ── */

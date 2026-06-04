@@ -2687,7 +2687,15 @@ elements.videoPlayer.addEventListener("pause", () => {
   elements.playPauseButton.setAttribute("aria-label", "Play");
 });
 elements.videoPlayer.addEventListener("timeupdate", updatePlayerUi);
-elements.videoPlayer.addEventListener("loadedmetadata", () => { updatePlayerUi(); renderCommentMarkers(); elements.videoFallback.hidden = true; });
+elements.videoPlayer.addEventListener("loadedmetadata", () => {
+  updatePlayerUi();
+  renderCommentMarkers();
+  elements.videoFallback.hidden = true;
+  // Set exact aspect-ratio so video fills full width with no side bars
+  const w = elements.videoPlayer.videoWidth;
+  const h = elements.videoPlayer.videoHeight;
+  if (w && h) elements.videoPlayer.style.aspectRatio = `${w} / ${h}`;
+});
 elements.videoPlayer.addEventListener("error", () => { elements.videoFallback.hidden = false; });
 elements.seekBar.addEventListener("input", () => {
   const duration = elements.videoPlayer.duration || 0;
