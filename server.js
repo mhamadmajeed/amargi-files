@@ -2373,22 +2373,18 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
         url: await signedGetUrl(rendition.key, `attachment; filename="${fileBaseName(file.name)}-${rendition.label}.mp4"`, 60 * 30),
       });
     }
-    if (isVideo(file) && getFfmpegPath() && originalExists) {
-      // ── Video renditions ──
+    if (isVideo(file)) {
+      // ── Video renditions not yet ready ──
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = file.exportJobs?.[rendition.quality] || "";
         if (status === "skipped") continue;
-        // Auto-kick: start if not already running; retry failed jobs
-        if (status !== "processing") {
-          generateVideoProxy(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false }).catch(() => {});
+        // Only show "Generating" if a job is actively in progress
+        // Never trigger new jobs from the downloads poll — that causes infinite retry loops.
+        // Generation is triggered only on upload and server startup.
+        if (status === "processing") {
+          downloads.push({ key: `pending-${rendition.quality}`, label: `${rendition.label} MP4`, detail: "Generating…", pending: true, generating: true });
         }
-        downloads.push({
-          key: `pending-${rendition.quality}`,
-          label: `${rendition.label} MP4`,
-          detail: "Generating…",
-          pending: true,
-          generating: true,
-        });
+        // Silently skip items with no active job — they'll be started by upload/startup handlers
       }
       // ── MP3 ──
       const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
@@ -2400,24 +2396,8 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
           detail: "128 kbps audio",
           url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
         });
-      } else {
-        const audioStatus = file.exportJobs?.mp3 || file.audioStatus || "";
-        if (audioStatus !== "processing") {
-          generateVideoProxy(file.id, { qualities: [], includeAudio: true, includeThumbnail: false }).catch(() => {});
-        }
+      } else if (file.exportJobs?.mp3 === "processing") {
         downloads.push({ key: "pending-mp3", label: "MP3 audio", detail: "Generating…", pending: true, generating: true });
-      }
-    } else if (isVideo(file)) {
-      // FFmpeg not available — show MP3 as unavailable if not already generated
-      const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
-      const hasAudio = await objectExists(expectedAudioKey);
-      if (hasAudio) {
-        downloads.push({
-          key: "mp3",
-          label: "MP3 audio",
-          detail: "128 kbps audio",
-          url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
-        });
       }
     }
     if (!renditionEntries.length && file.proxyKey) {
@@ -3023,6 +3003,27 @@ async function getHttpsCredentials() {
   return { key: generated.private, cert: generated.cert };
 }
 
+async function cleanStuckExportJobs() {
+  // Run on every startup (even without FFmpeg) to clear stuck "processing" jobs
+  // that were left behind by crashed/timed-out transcoding on a previous run.
+  if (!hasR2Config()) return;
+  try {
+    const db = await readMediaDb();
+    let changed = false;
+    for (const f of db.files || []) {
+      if (f.proxyStatus === "processing") { f.proxyStatus = "pending"; changed = true; }
+      if (f.exportJobs) {
+        for (const k of Object.keys(f.exportJobs)) {
+          if (f.exportJobs[k] === "processing") { f.exportJobs[k] = ""; changed = true; }
+        }
+      }
+    }
+    if (changed) { await writeMediaDb(db); console.log("[Startup] Cleared stuck export jobs."); }
+  } catch (err) {
+    console.warn("[Startup] cleanStuckExportJobs error:", err.message);
+  }
+}
+
 async function requeuePendingProxies() {
   if (!getFfmpegPath() || !hasR2Config()) return;
   try {
@@ -3081,6 +3082,7 @@ if (require.main === module) {
   app.listen(port, () => {
     console.log(`MediaFlow running at http://localhost:${port}`);
     applyR2CorsOnStartup();
+    cleanStuckExportJobs();
   });
   getHttpsCredentials()
     .then((credentials) => {

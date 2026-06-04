@@ -2351,9 +2351,12 @@ function closeReview() {
 }
 
 let downloadRefreshTimer = null;
+let downloadRefreshCount = 0;
+const DOWNLOAD_REFRESH_MAX = 30; // stop polling after ~2 min (30 × 4s)
 
 async function loadDownloads(asset, silent = false) {
   if (!silent) {
+    downloadRefreshCount = 0;
     elements.downloadButton.disabled = true;
     elements.downloadButton.textContent = "Loading...";
     elements.downloadMenu.hidden = true;
@@ -2370,12 +2373,13 @@ async function loadDownloads(asset, silent = false) {
     elements.downloadButton.disabled = !items.length;
     elements.downloadButton.textContent = items.length ? `↓ Download` : "No downloads";
     if (!silent) elements.downloadMenu.hidden = true;
-    // Auto-refresh while any rendition is still generating
+    // Poll only while something is actively generating, and stop after max retries
     const stillGenerating = items.some((item) => item.generating);
-    if (stillGenerating && state.selectedAsset?.id === asset.id) {
+    if (stillGenerating && state.selectedAsset?.id === asset.id && downloadRefreshCount < DOWNLOAD_REFRESH_MAX) {
+      downloadRefreshCount++;
       downloadRefreshTimer = setTimeout(() => {
         if (state.selectedAsset?.id === asset.id) loadDownloads(asset, true);
-      }, 4000);
+      }, 5000);
     }
   } catch (error) {
     if (!silent) {
