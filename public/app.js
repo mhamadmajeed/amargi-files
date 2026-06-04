@@ -554,9 +554,7 @@ function updateMentionHint() {
     ? `Will notify ${mentions.map((user) => user.name || user.email).join(", ")}`
     : matches.length
       ? `${matches.length} matching teammate${matches.length === 1 ? "" : "s"}`
-    : state.users.length
-      ? `Mention teammates with @name or @email`
-      : "";
+    : "";
 }
 
 async function loadNotifications() {
@@ -2430,30 +2428,24 @@ function renderComments() {
     const replies = (meta.replies || []).map((reply) => `<div class="commentReply">${escapeHtml(reply.text)}</div>`).join("");
     const owner = comment.owner?.name || comment.owner?.email || "Member";
     const initials = initialsFor(owner);
-    return `<article class="commentItem ${meta.resolved ? "resolved" : ""}" data-id="${escapeHtml(comment.id)}" data-time="${Number(comment.timestamp) || 0}">
-      <div class="commentCard">
-        <div class="commentCardHeader">
-          <span class="commentAvatar" aria-hidden="true">${escapeHtml(initials)}</span>
-          <span class="commentOwner">${escapeHtml(owner)}</span>
-          <span class="commentAge">· Just now · #${index + 1}</span>
-          <div class="commentActions">
-            <button class="commentEdit ghostButton" type="button" title="Edit" aria-label="Edit">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            </button>
-            <button class="commentResolve ghostButton" type="button" title="${meta.resolved ? "Reopen" : "Resolve"}" aria-label="${meta.resolved ? "Reopen" : "Resolve"}">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>
-            </button>
-            <button class="commentDelete ghostButton" type="button" title="Delete" aria-label="Delete">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-            </button>
+    return `<article class="c-item ${meta.resolved ? "resolved" : ""}" data-id="${escapeHtml(comment.id)}" data-time="${Number(comment.timestamp) || 0}">
+      <div class="c-card">
+        <div class="c-header">
+          <span class="c-avatar" aria-hidden="true">${escapeHtml(initials)}</span>
+          <span class="c-name">${escapeHtml(owner)}</span>
+          <span class="c-meta">#${index + 1} · Just now</span>
+          <div class="c-actions">
+            <button class="commentEdit c-btn" type="button" title="Edit" aria-label="Edit"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+            <button class="commentResolve c-btn" type="button" title="${meta.resolved ? "Reopen" : "Resolve"}" aria-label="${meta.resolved ? "Reopen" : "Resolve"}"><svg viewBox="0 0 24 24" width="12" height="12"><path d="m20 6-11 11-5-5"/></svg></button>
+            <button class="commentDelete c-btn" type="button" title="Delete" aria-label="Delete"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
           </div>
         </div>
-        <button class="commentJump" type="button">
-          <span class="commentTimecode">${formatTime(comment.timestamp)}</span>
-          <p class="commentText">${escapeHtml(text)}</p>
+        <button class="commentJump c-body" type="button" data-time="${Number(comment.timestamp) || 0}">
+          <span class="c-tc">${formatTime(comment.timestamp)}</span>
+          <span class="c-text">${escapeHtml(text).replace(/\n/g, " ")}</span>
         </button>
-        ${replies ? `<div class="commentReplies">${replies}</div>` : ""}
-        <button class="commentReplyButton commentReplyText" type="button">↩ Reply</button>
+        ${replies ? `<div class="c-replies">${replies.replace(/commentReply/g, "c-reply")}</div>` : ""}
+        <button class="commentReplyButton c-reply-btn" type="button">Reply</button>
       </div>
     </article>`;
   }).join("") || `<p class="muted">No comments yet.</p>`;
@@ -2509,9 +2501,9 @@ async function addComment(event) {
 }
 
 async function handleCommentAction(event) {
-  const item = event.target.closest(".commentItem");
+  const item = event.target.closest(".commentItem, .c-item");
   if (!item || !state.selectedAsset) return;
-  if (event.target.closest(".commentJump")) {
+  if (event.target.closest(".commentJump, .c-body")) {
     elements.videoPlayer.currentTime = Number(item.dataset.time) || 0;
     elements.videoPlayer.play().catch(() => {});
     return;

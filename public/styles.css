@@ -8270,6 +8270,7 @@ body.reviewMode .downloadPanel { display: none !important; }
 
 /* ── Comments sidebar ─────────────────────────────────────────── */
 
+/* Sidebar container */
 body.reviewMode .reviewSide {
   display: flex !important;
   flex-direction: column !important;
@@ -8277,7 +8278,7 @@ body.reviewMode .reviewSide {
   min-height: 0 !important;
   overflow: hidden !important;
   background: #0b1018 !important;
-  border-left: 1px solid #14202e !important;
+  border-left: 1px solid #141e2c !important;
 }
 body.reviewMode .commentsPanel {
   display: flex !important;
@@ -8287,53 +8288,52 @@ body.reviewMode .commentsPanel {
   overflow: hidden !important;
 }
 
-/* Header */
+/* Panel header */
 body.reviewMode .commentsPanelHeader {
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
   padding: 12px 14px 10px !important;
-  border-bottom: 1px solid #14202e !important;
+  border-bottom: 1px solid #141e2c !important;
   flex-shrink: 0 !important;
-  background: #0b1018 !important;
 }
 body.reviewMode .commentsPanelTitle {
-  font-size: 0.8rem !important;
+  font-size: 0.82rem !important;
   font-weight: 700 !important;
-  color: #c8d4e6 !important;
+  color: #c8d6ea !important;
   flex: 1 !important;
-  min-width: 0 !important;
 }
 body.reviewMode .commentFilters {
   display: flex !important;
-  gap: 1px !important;
-  flex-shrink: 0 !important;
+  gap: 2px !important;
 }
 body.reviewMode .commentFilter {
   padding: 3px 8px !important;
   border: none !important;
   border-radius: 5px !important;
   background: none !important;
-  color: #445263 !important;
-  font-size: 0.7rem !important;
+  color: #3d5168 !important;
+  font-size: 0.71rem !important;
   font-weight: 600 !important;
   cursor: pointer !important;
-  transition: color 0.12s, background 0.12s !important;
-  white-space: nowrap !important;
+  transition: all 0.12s !important;
 }
-body.reviewMode .commentFilter.active { background: #14202e !important; color: #b0bfd6 !important; }
-body.reviewMode .commentFilter:hover:not(.active) { color: #7a8fa8 !important; }
+body.reviewMode .commentFilter.active {
+  background: #14202e !important;
+  color: #a8bdd4 !important;
+}
+body.reviewMode .commentFilter:hover:not(.active) { color: #6a8aa8 !important; }
 body.reviewMode .commentCount {
-  font-size: 0.66rem !important;
-  font-weight: 700 !important;
-  color: #445263 !important;
-  padding: 1px 5px !important;
+  font-size: 0.67rem !important;
+  color: #3d5168 !important;
+  background: #0e1825 !important;
+  padding: 1px 6px !important;
   border-radius: 4px !important;
-  background: #0e1620 !important;
+  font-weight: 700 !important;
   flex-shrink: 0 !important;
 }
 
-/* Scrollable list */
+/* Scrollable list — fills ALL space between header and form */
 body.reviewMode .commentsList {
   flex: 1 1 0 !important;
   min-height: 0 !important;
@@ -8342,45 +8342,41 @@ body.reviewMode .commentsList {
 }
 body.reviewMode .commentsList::-webkit-scrollbar { width: 3px; }
 body.reviewMode .commentsList::-webkit-scrollbar-track { background: transparent; }
-body.reviewMode .commentsList::-webkit-scrollbar-thumb { background: #1a2738; border-radius: 3px; }
+body.reviewMode .commentsList::-webkit-scrollbar-thumb { background: #1a2d42; border-radius: 3px; }
 
 /* Empty state */
-body.reviewMode .commentsList .muted {
-  display: block !important;
-  color: #2e3f55 !important;
+body.reviewMode .commentsList > p.muted {
+  color: #2e4158 !important;
   font-size: 0.78rem !important;
   text-align: center !important;
-  padding: 40px 0 !important;
+  padding: 48px 0 !important;
+  display: block !important;
 }
 
-/* Comment card */
-body.reviewMode .commentItem {
-  background: #0e1522 !important;
-  border: 1px solid #14202e !important;
+/* ── Comment cards use c-* classes to avoid CSS cascade conflicts ── */
+body.reviewMode .c-item {
+  background: #0e1725 !important;
+  border: 1px solid #141e2c !important;
   border-radius: 8px !important;
-  margin-bottom: 6px !important;
-  padding: 0 !important;
+  margin-bottom: 5px !important;
   overflow: hidden !important;
   transition: border-color 0.12s !important;
 }
-body.reviewMode .commentItem:hover { border-color: #1c2d42 !important; }
-body.reviewMode .commentItem.resolved { opacity: 0.38 !important; }
-body.reviewMode .commentCard {
-  padding: 9px 11px 8px !important;
-  background: none !important;
-  border: none !important;
-  border-radius: 0 !important;
-  display: block !important;
+body.reviewMode .c-item:hover { border-color: #1c304a !important; }
+body.reviewMode .c-item.resolved { opacity: 0.35 !important; }
+
+body.reviewMode .c-card {
+  padding: 9px 10px 8px !important;
 }
 
-/* Header: avatar + name + age + number + actions */
-body.reviewMode .commentCardHeader {
+/* Header row */
+body.reviewMode .c-header {
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
   margin-bottom: 7px !important;
 }
-body.reviewMode .commentAvatar {
+body.reviewMode .c-avatar {
   width: 22px !important;
   height: 22px !important;
   border-radius: 50% !important;
@@ -8395,142 +8391,141 @@ body.reviewMode .commentAvatar {
   text-transform: uppercase !important;
   letter-spacing: 0 !important;
 }
-body.reviewMode .commentOwner {
+body.reviewMode .c-name {
   font-size: 0.75rem !important;
   font-weight: 700 !important;
-  color: #b8c8de !important;
+  color: #b4c8e0 !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  max-width: 90px !important;
   flex-shrink: 1 !important;
+  min-width: 0 !important;
+  max-width: 100px !important;
 }
-body.reviewMode .commentAge {
+body.reviewMode .c-meta {
   font-size: 0.66rem !important;
-  color: #2e3f55 !important;
+  color: #3d5168 !important;
   white-space: nowrap !important;
-  flex-shrink: 0 !important;
   flex: 1 !important;
   min-width: 0 !important;
 }
-body.reviewMode .commentActions {
+body.reviewMode .c-actions {
   display: none !important;
   gap: 1px !important;
   flex-shrink: 0 !important;
 }
-body.reviewMode .commentItem:hover .commentActions { display: flex !important; }
-body.reviewMode .commentActions .ghostButton {
-  display: flex !important; align-items: center !important; justify-content: center !important;
-  width: 20px !important; height: 20px !important; border: none !important;
-  border-radius: 3px !important; background: none !important; color: #2e3f55 !important;
-  cursor: pointer !important; padding: 0 !important; transition: all 0.1s !important;
+body.reviewMode .c-item:hover .c-actions { display: flex !important; }
+body.reviewMode .c-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+  border: none !important;
+  border-radius: 3px !important;
+  background: none !important;
+  color: #3d5168 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: all 0.1s !important;
 }
-body.reviewMode .commentActions .ghostButton:hover { background: #14202e !important; color: #7a8fa8 !important; }
-body.reviewMode .commentActions .ghostButton svg { stroke: currentColor !important; stroke-width: 1.8 !important; fill: none !important; display: block !important; width: 11px !important; height: 11px !important; }
+body.reviewMode .c-btn:hover { background: #14202e !important; color: #6a8aa8 !important; }
+body.reviewMode .c-btn svg { stroke: currentColor !important; fill: none !important; stroke-width: 1.8 !important; display: block !important; }
 
-/* Jump button: timecode + text */
-body.reviewMode .commentJump {
+/* Body: timecode + text */
+body.reviewMode .c-body {
   display: block !important;
   width: 100% !important;
   background: none !important;
   border: none !important;
-  padding: 0 !important;
+  padding: 0 0 6px 0 !important;
   text-align: left !important;
   cursor: pointer !important;
-  margin-bottom: 6px !important;
 }
-body.reviewMode .commentTimecode {
+body.reviewMode .c-tc {
   display: inline-block !important;
   padding: 1px 6px !important;
   border-radius: 4px !important;
-  background: #2e1e00 !important;
-  color: #d4960a !important;
+  background: #2a1a00 !important;
+  color: #cc8800 !important;
   font-size: 0.65rem !important;
   font-weight: 800 !important;
   font-variant-numeric: tabular-nums !important;
   vertical-align: middle !important;
   margin-right: 5px !important;
-  margin-bottom: 3px !important;
   white-space: nowrap !important;
 }
-body.reviewMode .commentText {
-  display: block !important;
+body.reviewMode .c-text {
   font-size: 0.78rem !important;
-  color: #7a8fa8 !important;
+  color: #6a8aa8 !important;
   line-height: 1.55 !important;
-  margin: 0 !important;
   word-break: break-word !important;
-  white-space: pre-wrap !important;
+  white-space: normal !important;
+  vertical-align: middle !important;
 }
 
-/* Reply link */
-body.reviewMode .commentReplyText {
+/* Replies */
+body.reviewMode .c-reply-btn {
   display: inline !important;
   background: none !important;
   border: none !important;
-  color: #2e3f55 !important;
+  color: #2e4158 !important;
   font-size: 0.68rem !important;
   font-weight: 600 !important;
   cursor: pointer !important;
   padding: 0 !important;
   transition: color 0.1s !important;
 }
-body.reviewMode .commentReplyText:hover { color: #5a7090 !important; }
-
-/* Replies */
-body.reviewMode .commentReplies {
-  margin-top: 4px !important;
-  margin-bottom: 4px !important;
-}
-body.reviewMode .commentReply {
+body.reviewMode .c-reply-btn:hover { color: #4a6a88 !important; }
+body.reviewMode .c-replies { margin: 3px 0 5px !important; }
+body.reviewMode .c-reply {
   padding: 5px 9px !important;
-  margin: 2px 0 !important;
+  margin-bottom: 2px !important;
   border-left: 2px solid #14202e !important;
   font-size: 0.73rem !important;
-  color: #445263 !important;
+  color: #3d5168 !important;
   line-height: 1.4 !important;
   word-break: break-word !important;
 }
 
-/* Input form */
+/* ── Comment input form ── */
 body.reviewMode .commentForm {
   flex-shrink: 0 !important;
-  border-top: 1px solid #14202e !important;
+  border-top: 1px solid #141e2c !important;
   padding: 10px !important;
   background: #0b1018 !important;
 }
 body.reviewMode .commentInputRow {
   display: flex !important;
-  align-items: flex-end !important;
+  align-items: center !important;
   gap: 6px !important;
-  background: #0e1522 !important;
-  border: 1px solid #1a2738 !important;
+  background: #0e1725 !important;
+  border: 1px solid #1a2d42 !important;
   border-radius: 8px !important;
-  padding: 7px 8px !important;
+  padding: 7px 9px !important;
   transition: border-color 0.15s !important;
 }
-body.reviewMode .commentInputRow:focus-within { border-color: #1e3050 !important; }
+body.reviewMode .commentInputRow:focus-within { border-color: #1e3858 !important; }
 body.reviewMode .commentTimecodeStamp {
   display: inline-flex !important;
   align-items: center !important;
   padding: 2px 6px !important;
   border-radius: 4px !important;
-  background: #2e1e00 !important;
-  color: #d4960a !important;
+  background: #2a1a00 !important;
+  color: #cc8800 !important;
   font-size: 0.65rem !important;
   font-weight: 800 !important;
   font-variant-numeric: tabular-nums !important;
   white-space: nowrap !important;
   flex-shrink: 0 !important;
-  margin-bottom: 2px !important;
 }
 body.reviewMode #commentInput {
   flex: 1 !important;
   background: none !important;
   border: none !important;
   outline: none !important;
-  color: #a8bdd4 !important;
-  font-size: 0.79rem !important;
+  color: #a0b8d0 !important;
+  font-size: 0.8rem !important;
   resize: none !important;
   min-height: 18px !important;
   max-height: 80px !important;
@@ -8538,7 +8533,7 @@ body.reviewMode #commentInput {
   padding: 0 !important;
   font-family: inherit !important;
 }
-body.reviewMode #commentInput::placeholder { color: #2a3a50 !important; }
+body.reviewMode #commentInput::placeholder { color: #243548 !important; }
 body.reviewMode .commentSendBtn {
   display: flex !important;
   align-items: center !important;
@@ -8547,34 +8542,29 @@ body.reviewMode .commentSendBtn {
   height: 26px !important;
   border: none !important;
   border-radius: 6px !important;
-  background: #4340cc !important;
+  background: #3a38bb !important;
   color: #fff !important;
   cursor: pointer !important;
   flex-shrink: 0 !important;
   transition: background 0.12s !important;
+  line-height: 0 !important;
   font-size: 0 !important;
 }
-body.reviewMode .commentSendBtn svg { stroke: #fff !important; stroke-width: 2 !important; fill: none !important; display: block !important; }
-body.reviewMode .commentSendBtn:hover { background: #534fe0 !important; }
+body.reviewMode .commentSendBtn svg { stroke: #fff !important; fill: none !important; stroke-width: 2 !important; display: block !important; }
+body.reviewMode .commentSendBtn:hover { background: #4c48d8 !important; }
 
-/* Mention hint — hidden until typing @ */
+/* Mention hint: hidden unless has content */
 body.reviewMode .mentionHint {
   display: none !important;
-}
-body.reviewMode .mentionHint:not(:empty) {
-  display: block !important;
-  font-size: 0.66rem !important;
-  color: #2e3f55 !important;
-  margin-top: 4px !important;
+  font-size: 0.68rem !important;
+  color: #2e4158 !important;
+  margin-top: 5px !important;
   padding: 0 2px !important;
 }
+body.reviewMode .mentionHint:not(:empty) { display: block !important; }
 
-/* Hide all old/unused panel elements */
+/* Hide old/unused elements */
 body.reviewMode .commentsPanel .paneHeader,
-body.reviewMode .commentCardBadge,
-body.reviewMode .commentCardFooter,
-body.reviewMode .commentCardBody,
-body.reviewMode .commentCardMeta,
 body.reviewMode .commentsPanelHeaderLeft,
 body.reviewMode .commentsPanelHeaderRight,
 body.reviewMode .commentFilterDropdown,
@@ -8583,7 +8573,12 @@ body.reviewMode .commentFormBottom,
 body.reviewMode .commentFormTop,
 body.reviewMode .commentFormTools,
 body.reviewMode .commentFormActions,
-body.reviewMode .commentVisibilityBtn { display: none !important; }
+body.reviewMode .commentVisibilityBtn,
+body.reviewMode .commentCardHeader,
+body.reviewMode .commentCardBadge,
+body.reviewMode .commentCardFooter,
+body.reviewMode .commentCardBody,
+body.reviewMode .commentCardMeta { display: none !important; }
 /* ── New player element styles (non-layout) ──────────────────────── */
 
 /* Seek hover tooltip */
