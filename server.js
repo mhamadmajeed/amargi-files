@@ -795,6 +795,29 @@ const VIDEO_RENDITIONS = [
 ];
 const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "1080,480").split(",").map((item) => item.trim()).filter(Boolean));
 
+// In-memory export queue — each fileId queued at most once per server session
+// Avoids infinite retry loops while still triggering generation when needed.
+const exportQueuedIds = new Set();
+let exportQueueRunning = false;
+
+function queueExport(fileId) {
+  if (!getFfmpegPath() || exportQueuedIds.has(fileId)) return;
+  exportQueuedIds.add(fileId);
+  if (!exportQueueRunning) runExportQueue();
+}
+
+async function runExportQueue() {
+  exportQueueRunning = true;
+  for (const fileId of [...exportQueuedIds]) {
+    try {
+      await generateVideoProxy(fileId, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
+    } catch (err) {
+      console.error(`[Queue] Export failed for ${fileId}:`, err.message);
+    }
+  }
+  exportQueueRunning = false;
+}
+
 function fileBaseName(name = "video") {
   return String(name || "video").replace(/\.[^.]+$/, "").replaceAll('"', "'");
 }
@@ -2373,22 +2396,30 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
         url: await signedGetUrl(rendition.key, `attachment; filename="${fileBaseName(file.name)}-${rendition.label}.mp4"`, 60 * 30),
       });
     }
-    if (isVideo(file)) {
-      // ── Video renditions not yet ready ──
-      for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
-        const status = file.exportJobs?.[rendition.quality] || "";
-        if (status === "skipped") continue;
-        // Only show "Generating" if a job is actively in progress
-        // Never trigger new jobs from the downloads poll — that causes infinite retry loops.
-        // Generation is triggered only on upload and server startup.
-        if (status === "processing") {
-          downloads.push({ key: `pending-${rendition.quality}`, label: `${rendition.label} MP4`, detail: "Generating…", pending: true, generating: true });
-        }
-        // Silently skip items with no active job — they'll be started by upload/startup handlers
-      }
-      // ── MP3 ──
+    if (isVideo(file) && originalExists) {
+      // Queue the file for export if it has missing renditions (once per server session)
+      const jobs = file.exportJobs || {};
+      const needsRendition = VIDEO_RENDITIONS.some((r) => !renditionEntries.some((e) => e.quality === r.quality) && jobs[r.quality] !== "skipped");
       const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
       const hasAudio = await objectExists(expectedAudioKey);
+      const needsAudio = !hasAudio && jobs.mp3 !== "skipped";
+      if (needsRendition || needsAudio) queueExport(file.id);
+
+      // ── Show pending video renditions ──
+      for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
+        const status = jobs[rendition.quality] || "";
+        if (status === "skipped") continue;
+        const isActive = status === "processing" || exportQueuedIds.has(file.id);
+        downloads.push({
+          key: `pending-${rendition.quality}`,
+          label: `${rendition.label} MP4`,
+          detail: isActive ? "Generating…" : "Queued",
+          pending: true,
+          generating: isActive,
+        });
+      }
+
+      // ── MP3 ──
       if (hasAudio) {
         downloads.push({
           key: "mp3",
@@ -2396,8 +2427,9 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
           detail: "128 kbps audio",
           url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
         });
-      } else if (file.exportJobs?.mp3 === "processing") {
-        downloads.push({ key: "pending-mp3", label: "MP3 audio", detail: "Generating…", pending: true, generating: true });
+      } else if (jobs.mp3 !== "skipped") {
+        const isActive = jobs.mp3 === "processing" || exportQueuedIds.has(file.id);
+        downloads.push({ key: "pending-mp3", label: "MP3 audio", detail: isActive ? "Generating…" : "Queued", pending: true, generating: isActive });
       }
     }
     if (!renditionEntries.length && file.proxyKey) {
