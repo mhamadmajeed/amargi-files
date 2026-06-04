@@ -8456,8 +8456,9 @@ body.reviewMode .c-tc {
   white-space: nowrap !important;
 }
 body.reviewMode .c-text {
-  font-size: 0.78rem !important;
-  color: #6a8aa8 !important;
+  display: inline !important;
+  font-size: 0.8rem !important;
+  color: #b0c4d8 !important;
   line-height: 1.55 !important;
   word-break: break-word !important;
   white-space: normal !important;
