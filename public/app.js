@@ -113,9 +113,14 @@ const elements = {
   playPauseButton: $("#playPauseButton"),
   currentTimeLabel: $("#currentTimeLabel"),
   seekBar: $("#seekBar"),
+  seekHoverTooltip: $("#seekHoverTooltip"),
   commentMarkers: $("#commentMarkers"),
   durationLabel: $("#durationLabel"),
   playbackQualitySelect: $("#playbackQualitySelect"),
+  playbackSpeedSelect: $("#playbackSpeedSelect"),
+  muteButton: $("#muteButton"),
+  volumeSlider: $("#volumeSlider"),
+  fullscreenButton: $("#fullscreenButton"),
   reviewHomeButton: $("#reviewHomeButton"),
   reviewBackButton: $("#reviewBackButton"),
   reviewShareButton: null,
@@ -834,6 +839,12 @@ async function enterDefaultProjectFolder(recentLocation = readRecentFolderLocati
   const folders = data.sort(assetSort);
   state.folderTree = folders;
   resetFolderTreeExpansion(folders);
+  // Deep-link: if URL has ?folder=id, navigate straight there
+  const urlFolderId = new URLSearchParams(location.search).get("folder");
+  if (urlFolderId && folders.find((f) => f.id === urlFolderId)) {
+    await goToFolder(urlFolderId);
+    return;
+  }
   if (recentLocation?.projectId === state.currentProject.id && folderStackIsValid(recentLocation.folderStack, folders, state.currentProject)) {
     state.folderStack = recentLocation.folderStack;
     expandFolderAncestors(state.folderStack[state.folderStack.length - 1]?.id, folders);
@@ -981,10 +992,47 @@ async function saveProjectRules(event) {
   }
 }
 
+// ── Folder URL routing ──────────────────────────────────────────────
+function pushFolderUrl(folderId) {
+  if (!folderId) return;
+  const url = new URL(location.href);
+  url.searchParams.set("folder", folderId);
+  history.pushState({ folderId }, "", url.toString());
+}
+
+function replaceFolderUrl(folderId) {
+  if (!folderId) return;
+  const url = new URL(location.href);
+  url.searchParams.set("folder", folderId);
+  history.replaceState({ folderId }, "", url.toString());
+}
+
+window.addEventListener("popstate", async (event) => {
+  const folderId = event.state?.folderId || new URLSearchParams(location.search).get("folder");
+  if (folderId && state.currentProject) {
+    const folder = state.folderTree.find((item) => item.id === folderId);
+    if (folder) {
+      const byId = new Map(state.folderTree.map((item) => [item.id, item]));
+      const stack = [];
+      let current = folder;
+      while (current) {
+        stack.unshift({ id: current.id, name: current.name });
+        current = current.parent_id ? byId.get(current.parent_id) : null;
+      }
+      state.folderStack = stack;
+      expandFolderAncestors(folderId);
+      persistFolderLocation();
+      await loadFolder({ skipTreeReload: true });
+    }
+  }
+});
+// ────────────────────────────────────────────────────────────────────
+
 async function enterFolder(id, name, reset = false) {
   if (reset) state.folderStack = [];
   state.folderStack.push({ id, name });
   persistFolderLocation();
+  pushFolderUrl(id);
   await loadFolder();
 }
 
@@ -1001,6 +1049,7 @@ async function goToFolder(id) {
   state.folderStack = stack;
   expandFolderAncestors(id);
   persistFolderLocation();
+  pushFolderUrl(id);
   await loadFolder();
 }
 
@@ -1012,6 +1061,7 @@ async function loadFolder({ skipTreeReload = false } = {}) {
   elements.backFolderButton.disabled = state.folderStack.length <= 1;
   elements.createFolderButton.disabled = false;
   elements.uploadButton.disabled = false;
+  replaceFolderUrl(current.id);
   const { data } = await api(`/api/accounts/${state.currentAccountId}/folders/${current.id}/children`);
   state.assets = data.sort(assetSort);
   persistFolderLocation();
@@ -2628,11 +2678,13 @@ elements.videoPlayer.addEventListener("click", triggerPlay);
 elements.playPauseButton.addEventListener("click", triggerPlay);
 elements.videoPlayer.addEventListener("play", () => {
   document.body.classList.add("isPlayingVideo");
-  elements.playPauseButton.textContent = "Pause";
+  elements.playPauseButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+  elements.playPauseButton.setAttribute("aria-label", "Pause");
 });
 elements.videoPlayer.addEventListener("pause", () => {
   document.body.classList.remove("isPlayingVideo");
-  elements.playPauseButton.textContent = "Play";
+  elements.playPauseButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`;
+  elements.playPauseButton.setAttribute("aria-label", "Play");
 });
 elements.videoPlayer.addEventListener("timeupdate", updatePlayerUi);
 elements.videoPlayer.addEventListener("loadedmetadata", () => { updatePlayerUi(); renderCommentMarkers(); elements.videoFallback.hidden = true; });
@@ -2641,6 +2693,66 @@ elements.seekBar.addEventListener("input", () => {
   const duration = elements.videoPlayer.duration || 0;
   if (duration) elements.videoPlayer.currentTime = (Number(elements.seekBar.value) / 1000) * duration;
 });
+
+// ── Seek hover timecode tooltip ──────────────────────────────────────
+elements.seekBar.addEventListener("mousemove", (e) => {
+  const duration = elements.videoPlayer.duration || 0;
+  if (!duration) return;
+  const rect = elements.seekBar.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const hoverTime = ratio * duration;
+  const tooltip = elements.seekHoverTooltip;
+  tooltip.textContent = formatTime(hoverTime);
+  tooltip.hidden = false;
+  const tipW = tooltip.offsetWidth || 40;
+  tooltip.style.left = `${Math.max(0, Math.min(rect.width - tipW, ratio * rect.width - tipW / 2))}px`;
+});
+elements.seekBar.addEventListener("mouseleave", () => { elements.seekHoverTooltip.hidden = true; });
+
+// ── Playback speed ───────────────────────────────────────────────────
+elements.playbackSpeedSelect.addEventListener("change", () => {
+  elements.videoPlayer.playbackRate = parseFloat(elements.playbackSpeedSelect.value);
+});
+
+// ── Volume & mute ────────────────────────────────────────────────────
+function updateVolumeIcon() {
+  const v = elements.videoPlayer.volume;
+  const muted = elements.videoPlayer.muted || v === 0;
+  const w1 = document.getElementById("volumeWave1");
+  const w2 = document.getElementById("volumeWave2");
+  if (w1) w1.style.display = muted ? "none" : "";
+  if (w2) w2.style.display = (muted || v < 0.5) ? "none" : "";
+  elements.muteButton.setAttribute("aria-label", muted ? "Unmute" : "Mute");
+  elements.volumeSlider.value = muted ? 0 : Math.round(v * 100);
+}
+elements.muteButton.addEventListener("click", () => {
+  elements.videoPlayer.muted = !elements.videoPlayer.muted;
+  updateVolumeIcon();
+});
+elements.volumeSlider.addEventListener("input", () => {
+  elements.videoPlayer.volume = elements.volumeSlider.value / 100;
+  elements.videoPlayer.muted = elements.volumeSlider.value == 0;
+  updateVolumeIcon();
+});
+elements.videoPlayer.addEventListener("volumechange", updateVolumeIcon);
+
+// ── Fullscreen ───────────────────────────────────────────────────────
+elements.fullscreenButton.addEventListener("click", () => {
+  const viewer = elements.fullscreenButton.closest(".viewer");
+  if (!document.fullscreenElement) {
+    (viewer || elements.videoPlayer).requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+});
+document.addEventListener("fullscreenchange", () => {
+  const isFs = Boolean(document.fullscreenElement);
+  elements.fullscreenButton.innerHTML = isFs
+    ? `<svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`
+    : `<svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
+  elements.fullscreenButton.setAttribute("aria-label", isFs ? "Exit fullscreen" : "Fullscreen");
+});
+
 elements.playbackQualitySelect.addEventListener("change", () => { if (state.selectedAsset) selectAsset(state.selectedAsset); });
 elements.downloadButton.addEventListener("click", () => toggleDownloadMenu());
 elements.downloadMenu.addEventListener("click", handleDownloadMenuClick);

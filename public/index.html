@@ -473,17 +473,38 @@
                   </button>
                   <div id="videoFallback" class="videoFallback" hidden>No playable preview URL was returned for this file.</div>
                   <div class="playerControls" aria-label="Video controls">
-                    <button id="playPauseButton" class="playerButton" type="button" aria-label="Play">Play</button>
+                    <button id="playPauseButton" class="playerButton" type="button" aria-label="Play">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
                     <span id="currentTimeLabel" class="timeLabel">00:00</span>
                     <div class="seekTrack">
                       <div id="commentMarkers" class="commentMarkers" aria-hidden="true"></div>
                       <input id="seekBar" class="seekBar" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek video" />
+                      <div id="seekHoverTooltip" class="seekHoverTooltip" hidden></div>
                     </div>
                     <span id="durationLabel" class="timeLabel">00:00</span>
-                    <select id="playbackQualitySelect" class="qualitySelect" aria-label="Playback quality">
+                    <!-- Volume -->
+                    <button id="muteButton" class="playerIconButton" type="button" aria-label="Mute">
+                      <svg id="volumeIcon" viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path id="volumeWave1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path id="volumeWave2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                    </button>
+                    <input id="volumeSlider" class="volumeSlider" type="range" min="0" max="100" value="100" step="1" aria-label="Volume" />
+                    <!-- Speed -->
+                    <select id="playbackSpeedSelect" class="playerSelect" aria-label="Playback speed">
+                      <option value="1">1×</option>
+                      <option value="1.25">1.25×</option>
+                      <option value="1.5">1.5×</option>
+                      <option value="1.75">1.75×</option>
+                      <option value="2">2×</option>
+                    </select>
+                    <!-- Quality -->
+                    <select id="playbackQualitySelect" class="playerSelect" aria-label="Playback quality">
                       <option value="1080">1080p</option>
                       <option value="480">480p</option>
                     </select>
+                    <!-- Fullscreen -->
+                    <button id="fullscreenButton" class="playerIconButton" type="button" aria-label="Fullscreen">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                    </button>
                   </div>
                 </div>
               </div>

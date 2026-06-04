@@ -8574,3 +8574,109 @@ body.reviewMode .commentSendBtn:hover { background: #5e57f0 !important; }
 
 /* Hide old paneHeader inside commentsPanel */
 body.reviewMode .commentsPanel .paneHeader { display: none !important; }
+
+/* ── Player controls — new elements ─────────────────────────────── */
+
+/* Override controls grid to fit new elements */
+body.reviewMode .playerControls {
+  grid-template-columns: 36px auto minmax(0, 1fr) auto 90px 14px 90px 70px 70px 32px !important;
+  grid-template-rows: 22px 42px !important;
+}
+/* Seekbar row spans all */
+body.reviewMode .seekTrack {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+  position: relative !important;
+}
+
+/* Seek hover tooltip */
+.seekHoverTooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: rgba(0,0,0,0.85);
+  color: #e8edf7;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.1s;
+}
+
+/* Player icon buttons (mute, fullscreen) */
+.playerIconButton {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: none !important;
+  color: #8494ae !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  transition: color 0.15s, background 0.15s !important;
+}
+.playerIconButton svg { stroke: currentColor; stroke-width: 1.8; fill: none; }
+.playerIconButton:hover { background: rgba(255,255,255,0.07) !important; color: #c8d3e6 !important; }
+
+/* Player selects (speed, quality) */
+.playerSelect {
+  height: 28px !important;
+  border: 1px solid #1e2a3a !important;
+  border-radius: 6px !important;
+  background: #0d1320 !important;
+  color: #9aa8be !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 0 4px !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  text-align: center !important;
+  min-width: 52px !important;
+}
+.playerSelect:hover { border-color: #2e3f58 !important; color: #c8d3e6 !important; }
+
+/* Volume slider */
+.volumeSlider {
+  width: 70px !important;
+  height: 3px !important;
+  cursor: pointer !important;
+  accent-color: #645bff !important;
+  flex-shrink: 0 !important;
+}
+
+/* Row 2 grid placements for new controls */
+body.reviewMode .playerButton    { grid-column: 1; grid-row: 2; }
+body.reviewMode #currentTimeLabel { grid-column: 2; grid-row: 2; }
+body.reviewMode #muteButton       { grid-column: 4; grid-row: 2; }
+body.reviewMode .volumeSlider     { grid-column: 5; grid-row: 2; align-self: center; }
+body.reviewMode #playbackSpeedSelect { grid-column: 7; grid-row: 2; width: 68px; }
+body.reviewMode #playbackQualitySelect { grid-column: 8; grid-row: 2; width: 66px; }
+body.reviewMode #durationLabel    { grid-column: 3; grid-row: 2; justify-self: end; }
+body.reviewMode #fullscreenButton { grid-column: 10; grid-row: 2; }
+
+/* Fullscreen: video fills the whole container */
+body.reviewMode .viewer:fullscreen,
+body.reviewMode .viewer:-webkit-full-screen {
+  background: #000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+body.reviewMode .viewer:fullscreen video,
+body.reviewMode .viewer:-webkit-full-screen video {
+  flex: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+body.reviewMode .viewer:fullscreen .playerControls,
+body.reviewMode .viewer:-webkit-full-screen .playerControls {
+  flex-shrink: 0 !important;
+}
