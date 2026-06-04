@@ -8079,49 +8079,89 @@ body.reviewMode .reviewMain {
   min-height: 0 !important;
 }
 
-/* Viewer: fills full reviewMain width and height, zero margins */
-body.reviewMode .viewer {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  align-self: stretch !important;
-  justify-self: stretch !important;
-  box-sizing: border-box !important;
-}
-
-/* reviewMain also zero gap/margin so viewer truly edge-to-edge */
+/* reviewMain/detailView: zero gap, edge-to-edge */
 body.reviewMode .reviewMain {
   gap: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
 }
-
-/* detailView zero gap so no black strip between player and sidebar */
 body.reviewMode .detailView {
   gap: 0 !important;
 }
+body.reviewMode .reviewSide {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+}
 
-/* Controls: two-row layout — seekbar on top, buttons on bottom */
+/* ── Viewer: position-absolute layout so video always fills full width ── */
+body.reviewMode .viewer {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #000 !important;
+  overflow: hidden !important;
+}
+
+/* Video fills the entire viewer, controls overlay at the bottom */
+body.reviewMode .viewer video,
+body.reviewMode .viewer .imagePreview {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: calc(100% - 78px) !important;  /* leave room for controls */
+  object-fit: contain !important;
+  background: #000 !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Center-play overlay button */
+body.reviewMode .centerPlayButton {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, calc(-50% - 39px)) !important; /* center in video area above controls */
+  z-index: 2 !important;
+}
+
+/* Video fallback message */
+body.reviewMode .videoFallback {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, calc(-50% - 39px)) !important;
+  z-index: 2 !important;
+  text-align: center !important;
+  width: 80% !important;
+}
+
+/* Controls pinned to the bottom */
 body.reviewMode .playerControls {
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 78px !important;
   display: grid !important;
-  grid-template-columns: 42px auto minmax(0, 1fr) auto auto !important;
+  grid-template-columns: 36px auto minmax(0, 1fr) auto 90px 14px 90px 70px 70px 32px !important;
   grid-template-rows: 22px 42px !important;
   align-items: center !important;
-  gap: 6px 12px !important;
-  min-height: 78px !important;
-  padding: 6px 16px 12px !important;
+  gap: 0 12px !important;
+  padding: 4px 16px 10px !important;
   background: #000 !important;
-  border-top: 0 !important;
-  flex-shrink: 0 !important;
+  border-top: 1px solid rgba(255,255,255,0.06) !important;
+  z-index: 3 !important;
+  box-sizing: border-box !important;
 }
 body.reviewMode .seekTrack {
   grid-column: 1 / -1 !important;
   grid-row: 1 !important;
+  position: relative !important;
   min-height: 22px !important;
 }
 body.reviewMode .seekBar {
@@ -8130,35 +8170,14 @@ body.reviewMode .seekBar {
   height: 4px !important;
   accent-color: #645bff !important;
 }
-body.reviewMode .playerButton {
-  grid-column: 1 !important;
-  grid-row: 2 !important;
-  width: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
-  border-radius: 999px !important;
-}
-body.reviewMode #currentTimeLabel {
-  grid-column: 2 !important;
-  grid-row: 2 !important;
-}
-body.reviewMode #durationLabel {
-  grid-column: 4 !important;
-  grid-row: 2 !important;
-  justify-self: end !important;
-}
-body.reviewMode .qualitySelect {
-  grid-column: 5 !important;
-  grid-row: 2 !important;
-  width: 88px !important;
-  min-width: 88px !important;
-  min-height: 36px !important;
-}
-}
-body.reviewMode .reviewSide {
-  grid-column: 2 !important;
-  grid-row: 2 !important;
-}
+body.reviewMode .playerButton    { grid-column: 1 !important; grid-row: 2 !important; width: 36px !important; min-width: 36px !important; min-height: 36px !important; border-radius: 999px !important; }
+body.reviewMode #currentTimeLabel { grid-column: 2 !important; grid-row: 2 !important; }
+body.reviewMode #durationLabel    { grid-column: 3 !important; grid-row: 2 !important; justify-self: end !important; }
+body.reviewMode #muteButton       { grid-column: 4 !important; grid-row: 2 !important; }
+body.reviewMode .volumeSlider     { grid-column: 5 !important; grid-row: 2 !important; align-self: center !important; }
+body.reviewMode #playbackSpeedSelect { grid-column: 7 !important; grid-row: 2 !important; width: 68px !important; }
+body.reviewMode #playbackQualitySelect { grid-column: 8 !important; grid-row: 2 !important; width: 68px !important; }
+body.reviewMode #fullscreenButton { grid-column: 10 !important; grid-row: 2 !important; }
 
 /* 2. Download menu — always a floating popup */
 body.reviewMode .downloadControl {
@@ -8234,18 +8253,7 @@ body.reviewMode .reviewIconRail,
 body.reviewMode .workflowPanel,
 body.reviewMode .downloadPanel { display: none !important; }
 
-/* 5. Video fills full viewer width — aspect-ratio set dynamically from JS */
-body.reviewMode .viewer video {
-  width: 100% !important;
-  height: auto !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: fill !important;   /* aspect-ratio is set correctly so fill = no distortion */
-  display: block !important;
-  flex-shrink: 1 !important;
-  flex-grow: 1 !important;
-  align-self: flex-start !important;
-}
+/* 5. (video layout now handled by the absolute-position viewer block above) */
 
 /* ── Comments panel redesign ── */
 
@@ -8578,19 +8586,7 @@ body.reviewMode .commentSendBtn:hover { background: #5e57f0 !important; }
 /* Hide old paneHeader inside commentsPanel */
 body.reviewMode .commentsPanel .paneHeader { display: none !important; }
 
-/* ── Player controls — new elements ─────────────────────────────── */
-
-/* Override controls grid to fit new elements */
-body.reviewMode .playerControls {
-  grid-template-columns: 36px auto minmax(0, 1fr) auto 90px 14px 90px 70px 70px 32px !important;
-  grid-template-rows: 22px 42px !important;
-}
-/* Seekbar row spans all */
-body.reviewMode .seekTrack {
-  grid-column: 1 / -1 !important;
-  grid-row: 1 !important;
-  position: relative !important;
-}
+/* ── New player element styles (non-layout) ──────────────────────── */
 
 /* Seek hover tooltip */
 .seekHoverTooltip {
@@ -8606,80 +8602,63 @@ body.reviewMode .seekTrack {
   white-space: nowrap;
   pointer-events: none;
   z-index: 10;
-  transition: opacity 0.1s;
 }
 
 /* Player icon buttons (mute, fullscreen) */
 .playerIconButton {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 28px !important;
-  height: 28px !important;
-  border: none !important;
-  border-radius: 6px !important;
-  background: none !important;
-  color: #8494ae !important;
-  cursor: pointer !important;
-  padding: 0 !important;
-  flex-shrink: 0 !important;
-  transition: color 0.15s, background 0.15s !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #8494ae;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
 }
 .playerIconButton svg { stroke: currentColor; stroke-width: 1.8; fill: none; }
-.playerIconButton:hover { background: rgba(255,255,255,0.07) !important; color: #c8d3e6 !important; }
+.playerIconButton:hover { background: rgba(255,255,255,0.07); color: #c8d3e6; }
 
 /* Player selects (speed, quality) */
 .playerSelect {
-  height: 28px !important;
-  border: 1px solid #1e2a3a !important;
-  border-radius: 6px !important;
-  background: #0d1320 !important;
-  color: #9aa8be !important;
-  font-size: 0.72rem !important;
-  font-weight: 700 !important;
-  padding: 0 4px !important;
-  cursor: pointer !important;
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  text-align: center !important;
-  min-width: 52px !important;
+  height: 28px;
+  border: 1px solid #1e2a3a;
+  border-radius: 6px;
+  background: #0d1320;
+  color: #9aa8be;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0 4px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+  min-width: 52px;
 }
-.playerSelect:hover { border-color: #2e3f58 !important; color: #c8d3e6 !important; }
+.playerSelect:hover { border-color: #2e3f58; color: #c8d3e6; }
 
 /* Volume slider */
 .volumeSlider {
-  width: 70px !important;
-  height: 3px !important;
-  cursor: pointer !important;
-  accent-color: #645bff !important;
-  flex-shrink: 0 !important;
+  width: 70px;
+  height: 3px;
+  cursor: pointer;
+  accent-color: #645bff;
+  flex-shrink: 0;
 }
 
-/* Row 2 grid placements for new controls */
-body.reviewMode .playerButton    { grid-column: 1; grid-row: 2; }
-body.reviewMode #currentTimeLabel { grid-column: 2; grid-row: 2; }
-body.reviewMode #muteButton       { grid-column: 4; grid-row: 2; }
-body.reviewMode .volumeSlider     { grid-column: 5; grid-row: 2; align-self: center; }
-body.reviewMode #playbackSpeedSelect { grid-column: 7; grid-row: 2; width: 68px; }
-body.reviewMode #playbackQualitySelect { grid-column: 8; grid-row: 2; width: 66px; }
-body.reviewMode #durationLabel    { grid-column: 3; grid-row: 2; justify-self: end; }
-body.reviewMode #fullscreenButton { grid-column: 10; grid-row: 2; }
-
-/* Fullscreen: video fills the whole container */
-body.reviewMode .viewer:fullscreen,
-body.reviewMode .viewer:-webkit-full-screen {
-  background: #000 !important;
-  display: flex !important;
-  flex-direction: column !important;
+/* Fullscreen: playerControls stay at bottom */
+body.reviewMode .viewer:fullscreen .playerControls,
+body.reviewMode .viewer:-webkit-full-screen .playerControls {
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
 }
 body.reviewMode .viewer:fullscreen video,
 body.reviewMode .viewer:-webkit-full-screen video {
-  flex: 1 !important;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-}
-body.reviewMode .viewer:fullscreen .playerControls,
-body.reviewMode .viewer:-webkit-full-screen .playerControls {
-  flex-shrink: 0 !important;
+  height: calc(100% - 78px) !important;
 }
