@@ -8274,8 +8274,10 @@ body.reviewMode .downloadPanel { display: none !important; }
 body.reviewMode .reviewSide {
   display: flex !important;
   flex-direction: column !important;
-  height: 100% !important;
+  /* Fill the grid cell completely */
+  align-self: stretch !important;
   min-height: 0 !important;
+  max-height: 100% !important;
   overflow: hidden !important;
   background: #0b1018 !important;
   border-left: 1px solid #141e2c !important;
@@ -8283,7 +8285,7 @@ body.reviewMode .reviewSide {
 body.reviewMode .commentsPanel {
   display: flex !important;
   flex-direction: column !important;
-  height: 100% !important;
+  flex: 1 1 0 !important;   /* grow to fill reviewSide, shrink if needed */
   min-height: 0 !important;
   overflow: hidden !important;
 }
@@ -8333,12 +8335,16 @@ body.reviewMode .commentCount {
   flex-shrink: 0 !important;
 }
 
-/* Scrollable list — fills ALL space between header and form */
+/* Scrollable list — fills ALL space between header and form, scrolls when full */
 body.reviewMode .commentsList {
   flex: 1 1 0 !important;
   min-height: 0 !important;
   overflow-y: auto !important;
+  overflow-x: hidden !important;
   padding: 8px 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
 }
 body.reviewMode .commentsList::-webkit-scrollbar { width: 3px; }
 body.reviewMode .commentsList::-webkit-scrollbar-track { background: transparent; }
@@ -8360,6 +8366,7 @@ body.reviewMode .c-item {
   border-radius: 8px !important;
   margin-bottom: 5px !important;
   overflow: hidden !important;
+  flex-shrink: 0 !important;  /* never compress cards — scroll instead */
   transition: border-color 0.12s !important;
 }
 body.reviewMode .c-item:hover { border-color: #1c304a !important; }
