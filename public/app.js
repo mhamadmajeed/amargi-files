@@ -2434,26 +2434,13 @@ function renderComments() {
       <div class="commentCard">
         <div class="commentCardHeader">
           <span class="commentAvatar" aria-hidden="true">${escapeHtml(initials)}</span>
-          <div class="commentCardMeta">
-            <span class="commentOwner">${escapeHtml(owner)}</span>
-            <span class="commentAge">Just now</span>
-          </div>
-          <div class="commentCardBadge">
-            <span class="commentNumber">#${index + 1}</span>
-            <svg class="commentPublicIcon" viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          </div>
-        </div>
-        <button class="commentJump commentCardBody" type="button">
-          <span class="commentTimecode">${formatTime(comment.timestamp)}</span>
-          <span class="commentText">${escapeHtml(text)}</span>
-        </button>
-        <div class="commentCardFooter">
-          <button class="commentReplyButton commentReplyText" type="button">Reply</button>
+          <span class="commentOwner">${escapeHtml(owner)}</span>
+          <span class="commentAge">· Just now · #${index + 1}</span>
           <div class="commentActions">
             <button class="commentEdit ghostButton" type="button" title="Edit" aria-label="Edit">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
             </button>
-            <button class="commentResolve ghostButton" type="button" title="${meta.resolved ? "Reopen" : "Solved"}" aria-label="${meta.resolved ? "Reopen" : "Solved"}">
+            <button class="commentResolve ghostButton" type="button" title="${meta.resolved ? "Reopen" : "Resolve"}" aria-label="${meta.resolved ? "Reopen" : "Resolve"}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 6-11 11-5-5"/></svg>
             </button>
             <button class="commentDelete ghostButton" type="button" title="Delete" aria-label="Delete">
@@ -2461,7 +2448,12 @@ function renderComments() {
             </button>
           </div>
         </div>
-        ${replies}
+        <button class="commentJump" type="button">
+          <span class="commentTimecode">${formatTime(comment.timestamp)}</span>
+          <p class="commentText">${escapeHtml(text)}</p>
+        </button>
+        ${replies ? `<div class="commentReplies">${replies}</div>` : ""}
+        <button class="commentReplyButton commentReplyText" type="button">↩ Reply</button>
       </div>
     </article>`;
   }).join("") || `<p class="muted">No comments yet.</p>`;
