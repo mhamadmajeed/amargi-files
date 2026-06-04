@@ -1075,6 +1075,9 @@ async function runFfmpeg(args, label) {
 }
 
 async function generateVideoProxy(fileId, options = {}) {
+  // Check FFmpeg BEFORE reading/writing the DB to avoid race conditions
+  // that can overwrite comments when FFmpeg is unavailable (e.g. on Vercel)
+  if (!getFfmpegPath()) return;
   const db = await readMediaDb();
   const file = getFileRecord(db, fileId);
   if (!isVideo(file) || !hasR2Config()) return;
@@ -2200,7 +2203,7 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
-    if (isVideo(file)) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file) && getFfmpegPath()) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2237,7 +2240,7 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
-    if (isVideo(file)) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file) && getFfmpegPath()) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);

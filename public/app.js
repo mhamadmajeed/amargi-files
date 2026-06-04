@@ -2510,7 +2510,7 @@ async function addComment(event) {
   const timestamp = elements.videoPlayer.currentTime || 0;
   state.commentPosting = true;
   elements.commentButton.disabled = true;
-  elements.commentButton.textContent = "Posting...";
+  elements.commentButton.style.opacity = "0.5";
   elements.commentInput.value = "";
   state.activeMention = null;
   renderMentionList([]);
@@ -2530,7 +2530,7 @@ async function addComment(event) {
   } finally {
     state.commentPosting = false;
     elements.commentButton.disabled = false;
-    elements.commentButton.textContent = "Post";
+    elements.commentButton.style.opacity = "";
   }
 }
 
