@@ -8106,13 +8106,26 @@ body.reviewMode .viewer {
 }
 
 /* Video fills the entire viewer, controls overlay at the bottom */
-body.reviewMode .viewer video,
-body.reviewMode .viewer .imagePreview {
+body.reviewMode .viewer video {
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   width: 100% !important;
   height: calc(100% - 78px) !important;  /* leave room for controls */
+  object-fit: contain !important;
+  background: #000 !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Image preview — same absolute layout but respects hidden attribute */
+body.reviewMode .viewer .imagePreview:not([hidden]) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: calc(100% - 78px) !important;
   object-fit: contain !important;
   background: #000 !important;
   display: block !important;
