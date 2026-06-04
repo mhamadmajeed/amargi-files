@@ -1124,11 +1124,12 @@ async function generateVideoProxy(fileId, options = {}) {
     });
     console.log(`[export] Source downloaded, starting transcoding …`);
 
-    // Probe source width — only skip a rendition if source is strictly smaller than target (can't upscale)
+    // Skip renditions where source is same size or smaller than the target (no benefit)
+    // e.g. 1080p source → skip 1080p rendition, keep 480p
     const sourceWidth = await probeVideoWidth(localInput);
     const effectiveQualities = qualities.filter((r) => {
-      if (sourceWidth > 0 && r.maxWidth > sourceWidth) {
-        console.log(`[export] Skipping ${r.label} — source width ${sourceWidth}px is smaller than ${r.maxWidth}px`);
+      if (sourceWidth > 0 && r.maxWidth >= sourceWidth) {
+        console.log(`[export] Skipping ${r.label} — source width ${sourceWidth}px does not exceed ${r.maxWidth}px`);
         file.exportJobs[r.quality] = "skipped";
         return false;
       }
@@ -2370,58 +2371,62 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
       });
     }
     if (isVideo(file) && getFfmpegPath() && originalExists) {
+      // ── Video renditions ──
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = file.exportJobs?.[rendition.quality] || "";
-        // Skip renditions skipped because source resolution is too low
         if (status === "skipped") continue;
-        // Auto-kick off generation if not already running or failed
-        if (status !== "processing" && status !== "failed") {
+        // Auto-kick: start if not already running; retry failed jobs
+        if (status !== "processing") {
           generateVideoProxy(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false }).catch(() => {});
         }
         downloads.push({
           key: `pending-${rendition.quality}`,
           label: `${rendition.label} MP4`,
-          detail: status === "failed" ? "Processing failed — retrying…" : "Generating…",
+          detail: "Generating…",
           pending: true,
           generating: true,
         });
       }
+      // ── MP3 ──
+      const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
+      const hasAudio = await objectExists(expectedAudioKey);
+      if (hasAudio) {
+        downloads.push({
+          key: "mp3",
+          label: "MP3 audio",
+          detail: "128 kbps audio",
+          url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
+        });
+      } else {
+        const audioStatus = file.exportJobs?.mp3 || file.audioStatus || "";
+        if (audioStatus !== "processing") {
+          generateVideoProxy(file.id, { qualities: [], includeAudio: true, includeThumbnail: false }).catch(() => {});
+        }
+        downloads.push({ key: "pending-mp3", label: "MP3 audio", detail: "Generating…", pending: true, generating: true });
+      }
+    } else if (isVideo(file)) {
+      // FFmpeg not available — show MP3 as unavailable if not already generated
+      const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
+      const hasAudio = await objectExists(expectedAudioKey);
+      if (hasAudio) {
+        downloads.push({
+          key: "mp3",
+          label: "MP3 audio",
+          detail: "128 kbps audio",
+          url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
+        });
+      }
     }
     if (!renditionEntries.length && file.proxyKey) {
-      downloads.push({
-        key: "proxy",
-        label: "Preview MP4",
-        detail: "Generated proxy",
-        url: await signedGetUrl(file.proxyKey, `attachment; filename="${fileBaseName(file.name)}-proxy.mp4"`, 60 * 30),
-      });
-    }
-    const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
-    const hasAudioDownload = isVideo(file) && await objectExists(expectedAudioKey);
-    if (hasAudioDownload) {
-      downloads.push({
-        key: "mp3",
-        label: "MP3 audio",
-        detail: "192 kbps audio",
-        url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
-      });
-    } else if (isVideo(file) && file.audioStatus !== "not_available") {
-      const audioStatus = file.exportJobs?.mp3 || file.audioStatus || "";
-      downloads.push({
-        key: "prepare-mp3",
-        label: "MP3 audio",
-        detail: !originalExists
-          ? "Original file is missing from storage"
-          : !ffmpegAvailable
-            ? "FFmpeg is not configured on this machine"
-            : audioStatus === "processing"
-              ? "Preparing in the background"
-              : audioStatus === "failed"
-                ? "Failed - click to retry"
-                : "Prepare audio export",
-        action: originalExists && ffmpegAvailable && audioStatus !== "processing" ? "prepare" : "",
-        exportType: "audio",
-        pending: audioStatus === "processing" || !originalExists || !ffmpegAvailable,
-      });
+      const proxyExists = await objectExists(file.proxyKey);
+      if (proxyExists) {
+        downloads.push({
+          key: "proxy",
+          label: "Preview MP4",
+          detail: "Compressed preview",
+          url: await signedGetUrl(file.proxyKey, `attachment; filename="${fileBaseName(file.name)}-proxy.mp4"`, 60 * 30),
+        });
+      }
     }
     response.json({ data: downloads });
   } catch (error) {
@@ -3019,13 +3024,21 @@ async function requeuePendingProxies() {
   if (!getFfmpegPath() || !hasR2Config()) return;
   try {
     const db = await readMediaDb();
-    const pending = (db.files || []).filter((f) =>
-      f.r2Key && !f.deletedAt && (f.proxyStatus === "pending" || f.proxyStatus === "processing")
-    );
-    if (!pending.length) return;
-    // Reset stuck processing state
+    // Find all video files that have any unfinished export job (pending, processing, failed, or not started)
+    const toProcess = (db.files || []).filter((f) => {
+      if (!f.r2Key || f.deletedAt || !isVideo(f)) return false;
+      // Any rendition or audio not yet ready/skipped
+      const jobs = f.exportJobs || {};
+      const needsWork = VIDEO_RENDITIONS.some((r) => {
+        const s = jobs[r.quality] || "";
+        return s !== "ready" && s !== "skipped";
+      }) || (jobs.mp3 !== "ready");
+      return needsWork;
+    });
+    if (!toProcess.length) return;
+    // Reset stuck "processing" state so jobs can restart
     let changed = false;
-    for (const f of pending) {
+    for (const f of toProcess) {
       if (f.proxyStatus === "processing") { f.proxyStatus = "pending"; changed = true; }
       if (f.exportJobs) {
         for (const k of Object.keys(f.exportJobs)) {
@@ -3034,17 +3047,17 @@ async function requeuePendingProxies() {
       }
     }
     if (changed) await writeMediaDb(db);
-    console.log(`[Startup] Processing proxies for ${pending.length} file(s) sequentially…`);
-    // Run ONE at a time to avoid freezing the server
+    console.log(`[Startup] Queuing ${toProcess.length} file(s) for export…`);
+    // Process one at a time to avoid freezing
     (async () => {
-      for (const f of pending) {
+      for (const f of toProcess) {
         try {
-          await generateVideoProxy(f.id, { qualities: ["480"], includeAudio: false });
+          await generateVideoProxy(f.id, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
         } catch (err) {
-          console.error(`[Startup] Proxy failed for ${f.id}:`, err.message);
+          console.error(`[Startup] Export failed for ${f.name}:`, err.message);
         }
       }
-      console.log("[Startup] Startup proxy generation complete.");
+      console.log("[Startup] Export queue complete.");
     })();
   } catch (err) {
     console.error("[Startup] requeuePendingProxies error:", err.message);
