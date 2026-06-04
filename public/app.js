@@ -1007,6 +1007,15 @@ function replaceFolderUrl(folderId) {
 
 window.addEventListener("popstate", async (event) => {
   const folderId = event.state?.folderId || new URLSearchParams(location.search).get("folder");
+  const fileId = event.state?.fileId || new URLSearchParams(location.search).get("file");
+  if (fileId && state.currentProject) {
+    // Navigating to a file state — reopen it
+    const asset = state.assets.find((a) => a.id === fileId);
+    if (asset) { await selectAsset(asset); return; }
+  } else if (state.selectedAsset) {
+    // Navigating away from file — close review
+    closeReview();
+  }
   if (folderId && state.currentProject) {
     const folder = state.folderTree.find((item) => item.id === folderId);
     if (folder) {
@@ -1066,6 +1075,22 @@ async function loadFolder({ skipTreeReload = false } = {}) {
   if (skipTreeReload) renderFolderTree();
   else await loadFolderTree();
   renderAssets();
+
+  // Deep-link: if URL has ?file=id, reopen that file after folder loads
+  const urlFileId = new URLSearchParams(location.search).get("file");
+  if (urlFileId) {
+    const asset = state.assets.find((a) => a.id === urlFileId);
+    if (asset) {
+      // Small delay so the folder renders first, then open the file
+      setTimeout(() => selectAsset(asset), 50);
+    } else {
+      // File not in this folder — fetch it directly from the API
+      try {
+        const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${urlFileId}`);
+        if (data?.id) setTimeout(() => selectAsset(data), 50);
+      } catch {}
+    }
+  }
 }
 
 async function loadFolderTree() {
@@ -2211,6 +2236,11 @@ async function selectAsset(asset) {
   document.body.classList.remove("isPlayingVideo");
   document.body.classList.add("reviewMode");
 
+  // Persist file in URL so refresh restores the same file
+  const url = new URL(location.href);
+  url.searchParams.set("file", asset.id);
+  history.replaceState({ folderId: url.searchParams.get("folder"), fileId: asset.id }, "", url.toString());
+
   if (kind === "video") {
     const playbackUrl = `/api/accounts/${state.currentAccountId}/files/${asset.id}/playback?quality=${elements.playbackQualitySelect.value}`;
     elements.videoPlayer.removeAttribute("src");
@@ -2278,6 +2308,10 @@ function closeReview() {
   state.selectedAsset = null;
   document.body.classList.remove("reviewMode");
   document.body.classList.remove("isPlayingVideo");
+  // Remove file from URL when closing review
+  const url = new URL(location.href);
+  url.searchParams.delete("file");
+  history.replaceState({ folderId: url.searchParams.get("folder") }, "", url.toString());
   elements.videoPlayer.pause();
   elements.videoPlayer.removeAttribute("src");
   elements.videoPlayer.load();
