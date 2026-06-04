@@ -1,5 +1,9 @@
 ﻿:root {
   color-scheme: dark;
+  /* Project color — set by JS applyProjectColor(), defaults to blue */
+  --project-accent: #5b8dee;
+  --project-bg: rgba(91,141,238,0.08);
+  --project-glow: rgba(91,141,238,0.18);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #07080b;
@@ -8662,4 +8666,103 @@ body.reviewMode .viewer:-webkit-full-screen .playerControls {
 body.reviewMode .viewer:fullscreen video,
 body.reviewMode .viewer:-webkit-full-screen video {
   height: calc(100% - 78px) !important;
+}
+
+/* ── Project color theming ───────────────────────────────────────── */
+
+/* Workspace title color */
+#workspaceTitle {
+  color: var(--project-accent) !important;
+}
+
+/* Project selector accent */
+#projectSelect {
+  border-color: var(--project-accent) !important;
+  color: var(--project-accent) !important;
+}
+
+/* Topbar left accent strip */
+.topbar {
+  border-left: 3px solid var(--project-accent) !important;
+  padding-left: 14px !important;
+}
+
+/* Active folder in sidebar */
+.folderButton.active,
+.folderButton[aria-current="true"],
+.folderButton:has(+ .folderChildren) {
+  color: var(--project-accent) !important;
+}
+.folderButton.active::before,
+.folderItem.active .folderButton::before {
+  background: var(--project-accent) !important;
+}
+
+/* Upload button */
+#uploadButton {
+  background: var(--project-accent) !important;
+  border-color: var(--project-accent) !important;
+}
+
+/* Create folder button */
+#createFolderButton,
+#sidebarCreateFolderButton {
+  color: var(--project-accent) !important;
+  border-color: var(--project-accent) !important;
+}
+
+/* Folder count badge */
+.folderCount {
+  background: var(--project-bg) !important;
+  color: var(--project-accent) !important;
+}
+
+/* Selected asset card border in grid view */
+.assetCard.selected,
+.assetCard[aria-selected="true"] {
+  border-color: var(--project-accent) !important;
+  box-shadow: 0 0 0 1px var(--project-accent) !important;
+}
+
+/* Breadcrumb active color */
+.folderBreadcrumbItem.active,
+.breadcrumbCurrent {
+  color: var(--project-accent) !important;
+}
+
+/* Scrollbar thumb */
+.folderTree::-webkit-scrollbar-thumb,
+.commentsList::-webkit-scrollbar-thumb {
+  background: var(--project-accent) !important;
+  opacity: 0.4 !important;
+}
+
+/* Review topbar accent line */
+body.reviewMode .reviewTopbar {
+  border-bottom: 1px solid var(--project-bg) !important;
+  background: linear-gradient(to bottom, var(--project-bg), transparent) !important;
+}
+
+/* Comment send button uses project color */
+body.reviewMode .commentSendBtn {
+  background: var(--project-accent) !important;
+}
+body.reviewMode .commentSendBtn:hover {
+  filter: brightness(1.15) !important;
+}
+
+/* Seek bar accent */
+body.reviewMode .seekBar {
+  accent-color: var(--project-accent) !important;
+}
+
+/* Volume slider */
+body.reviewMode .volumeSlider {
+  accent-color: var(--project-accent) !important;
+}
+
+/* Active comment filter tab */
+body.reviewMode .commentFilter.active {
+  background: var(--project-bg) !important;
+  color: var(--project-accent) !important;
 }

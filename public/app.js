@@ -236,6 +236,29 @@ function formatBytes(bytes = 0) {
   return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+// Curated palette — each project gets a distinct accent color
+const PROJECT_COLORS = [
+  { accent: "#5b8dee", bg: "rgba(91,141,238,0.08)",  glow: "rgba(91,141,238,0.18)"  }, // blue (default)
+  { accent: "#4ec994", bg: "rgba(78,201,148,0.08)",  glow: "rgba(78,201,148,0.18)"  }, // teal
+  { accent: "#f0883e", bg: "rgba(240,136,62,0.08)",  glow: "rgba(240,136,62,0.18)"  }, // orange
+  { accent: "#c87ee8", bg: "rgba(200,126,232,0.08)", glow: "rgba(200,126,232,0.18)" }, // purple
+  { accent: "#f2c94c", bg: "rgba(242,201,76,0.08)",  glow: "rgba(242,201,76,0.18)"  }, // yellow
+  { accent: "#e85b7a", bg: "rgba(232,91,122,0.08)",  glow: "rgba(232,91,122,0.18)"  }, // pink
+  { accent: "#56ccf2", bg: "rgba(86,204,242,0.08)",  glow: "rgba(86,204,242,0.18)"  }, // cyan
+  { accent: "#6fcf97", bg: "rgba(111,207,151,0.08)", glow: "rgba(111,207,151,0.18)" }, // green
+];
+
+function applyProjectColor(project, allProjects = []) {
+  if (!project) return;
+  // Assign color by stable index in project list
+  const idx = allProjects.findIndex((p) => p.id === project.id);
+  const color = PROJECT_COLORS[Math.max(0, idx) % PROJECT_COLORS.length];
+  const root = document.documentElement;
+  root.style.setProperty("--project-accent", color.accent);
+  root.style.setProperty("--project-bg", color.bg);
+  root.style.setProperty("--project-glow", color.glow);
+}
+
 function formatTime(seconds = 0) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const h = Math.floor(total / 3600);
@@ -807,6 +830,7 @@ async function loadProjects() {
   if (!state.currentProject) return;
   elements.projectSelect.value = state.currentProject.id;
   elements.workspaceTitle.textContent = state.currentProject.name;
+  applyProjectColor(state.currentProject, data);
   await enterDefaultProjectFolder(recentLocation);
 }
 
@@ -2654,6 +2678,7 @@ elements.projectSelect.addEventListener("change", async () => {
   localStorage.setItem("mediaflow_project", state.currentProject?.id || "");
   if (state.currentProject) {
     elements.workspaceTitle.textContent = state.currentProject.name;
+    applyProjectColor(state.currentProject, state.projects);
     await enterDefaultProjectFolder();
   }
 });
