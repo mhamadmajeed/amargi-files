@@ -2403,11 +2403,16 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
       const hasAudio = await objectExists(expectedAudioKey);
       const ffmpegAvailableForExport = Boolean(getFfmpegPath());
 
+      // A job is stale if it has been "processing" for more than 10 minutes
+      // (server restart or crash killed the FFmpeg process — never self-resolves).
+      const startedAt = Date.parse(file.proxyStartedAt || "");
+      const jobIsStale = startedAt > 0 && Date.now() - startedAt > 10 * 60 * 1000;
+
       // ── Show video renditions not yet ready ──
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = jobs[rendition.quality] || "";
         if (status === "skipped") continue;
-        const isGenerating = status === "processing";
+        const isGenerating = status === "processing" && !jobIsStale;
         downloads.push({
           key: `pending-${rendition.quality}`,
           label: `${rendition.label} MP4`,
@@ -2429,7 +2434,7 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
           url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
         });
       } else if (jobs.mp3 !== "skipped") {
-        const isGenerating = jobs.mp3 === "processing";
+        const isGenerating = jobs.mp3 === "processing" && !jobIsStale;
         downloads.push({
           key: "pending-mp3",
           label: "MP3 audio",
