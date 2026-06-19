@@ -634,6 +634,64 @@ async function objectExists(key) {
   }
 }
 
+async function headR2Object(key) {
+  const config = getR2Config();
+  return getR2Client().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+}
+
+async function streamR2Object(request, response, key, fallbackContentType = "application/octet-stream") {
+  if (!key || !hasR2Config()) {
+    response.status(404).json({ error: "File not found in storage." });
+    return;
+  }
+  const config = getR2Config();
+  const head = await headR2Object(key);
+  const size = Number(head.ContentLength || 0);
+  const contentType = head.ContentType || fallbackContentType;
+  const range = request.headers.range;
+  const headers = {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=300",
+    "Content-Type": contentType,
+  };
+
+  let command;
+  if (range && size) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match) {
+      response.status(416).set("Content-Range", `bytes */${size}`).end();
+      return;
+    }
+    let start = match[1] ? Number(match[1]) : 0;
+    let end = match[2] ? Number(match[2]) : size - 1;
+    if (!match[1] && match[2]) {
+      const suffixLength = Number(match[2]);
+      start = Math.max(size - suffixLength, 0);
+      end = size - 1;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+      response.status(416).set("Content-Range", `bytes */${size}`).end();
+      return;
+    }
+    end = Math.min(end, size - 1);
+    headers["Content-Range"] = `bytes ${start}-${end}/${size}`;
+    headers["Content-Length"] = String(end - start + 1);
+    command = new GetObjectCommand({ Bucket: config.bucket, Key: key, Range: `bytes=${start}-${end}` });
+    response.writeHead(206, headers);
+  } else {
+    if (size) headers["Content-Length"] = String(size);
+    command = new GetObjectCommand({ Bucket: config.bucket, Key: key });
+    response.writeHead(200, headers);
+  }
+
+  const result = await getR2Client().send(command);
+  result.Body.on("error", (error) => {
+    if (!response.headersSent) response.status(500);
+    response.destroy(error);
+  });
+  result.Body.pipe(response);
+}
+
 function metadataKey(name) {
   return storageKey("mediaflow-metadata", name);
 }
@@ -2335,10 +2393,7 @@ app.get("/api/accounts/:accountId/files/:fileId/playback", async (request, respo
       response.status(503).json({ error: "File not found in storage." });
       return;
     }
-    // Redirect to R2 — proxy files have faststart so no seeking issues
-    // R2 CORS is configured to expose Content-Range for video playback
-    const url = await signedGetUrl(playbackKey, "", 60 * 30);
-    response.redirect(302, url);
+    await streamR2Object(request, response, playbackKey, file.mimeType || "video/mp4");
   } catch (error) {
     next(error);
   }
@@ -3009,7 +3064,9 @@ app.get("/share/:token/files/:fileId/playback", async (request, response, next) 
       return;
     }
     const file = getFileRecord(db, request.params.fileId);
-    response.redirect(302, await signedGetUrl(file.proxyKey || file.r2Key, "", 60 * 30));
+    const requestedQuality = String(request.query.quality || "1080");
+    const playbackKey = file.renditions?.[requestedQuality]?.key || file.renditions?.["1080"]?.key || file.proxyKey || file.r2Key;
+    await streamR2Object(request, response, playbackKey, file.mimeType || "video/mp4");
   } catch (error) {
     next(error);
   }
