@@ -2391,13 +2391,39 @@ async function loadDownloads(asset, silent = false) {
 }
 
 function downloadOptionMarkup(item) {
-  const disabled = item.pending || (!item.url && !item.action);
-  const spinner = item.generating ? `<span class="downloadSpinner"></span>` : "";
+  if (item.generating) {
+    return `
+      <button class="downloadMenuItem generating" type="button" disabled
+        data-export-type="${escapeHtml(item.exportType || "")}" data-quality="${escapeHtml(item.quality || "")}">
+        <strong>${escapeHtml(item.label)}</strong>
+        <span>${escapeHtml(item.detail || "")}</span>
+        <span class="downloadSpinner"></span>
+      </button>
+    `;
+  }
+  if (item.prepare) {
+    return `
+      <button class="downloadMenuItem prepareBtn" type="button"
+        data-prepare="1" data-export-type="${escapeHtml(item.exportType || "")}" data-quality="${escapeHtml(item.quality || "")}">
+        <strong>${escapeHtml(item.label)}</strong>
+        <span>${escapeHtml(item.detail || "")}</span>
+        <em class="prepareLabel">Prepare</em>
+      </button>
+    `;
+  }
+  if (item.url) {
+    return `
+      <button class="downloadMenuItem" type="button" data-url="${escapeHtml(item.url)}">
+        <strong>${escapeHtml(item.label)}</strong>
+        <span>${escapeHtml(item.detail || "")}</span>
+        <em>↓</em>
+      </button>
+    `;
+  }
   return `
-    <button class="downloadMenuItem ${disabled ? "pending" : ""}" type="button" data-url="${escapeHtml(item.url || "")}" data-action="${escapeHtml(item.action || "")}" data-export-type="${escapeHtml(item.exportType || "")}" data-quality="${escapeHtml(item.quality || "")}" ${disabled ? "disabled" : ""}>
+    <button class="downloadMenuItem unavailable" type="button" disabled>
       <strong>${escapeHtml(item.label)}</strong>
       <span>${escapeHtml(item.detail || "")}</span>
-      ${item.generating ? spinner : (!disabled ? `<em>↓</em>` : "")}
     </button>
   `;
 }
@@ -2421,9 +2447,33 @@ function toggleDownloadMenu(force) {
 async function handleDownloadMenuClick(event) {
   const item = event.target.closest(".downloadMenuItem");
   if (!item || item.disabled) return;
-  if (!item.dataset.url) return;
-  toggleDownloadMenu(false);
-  location.href = item.dataset.url;
+  if (item.dataset.url) {
+    toggleDownloadMenu(false);
+    location.href = item.dataset.url;
+    return;
+  }
+  if (item.dataset.prepare && state.selectedAsset) {
+    const exportType = item.dataset.exportType || "video";
+    const quality = item.dataset.quality || "";
+    item.disabled = true;
+    item.querySelector(".prepareLabel").textContent = "Starting…";
+    try {
+      await api(`/api/accounts/${state.currentAccountId}/files/${state.selectedAsset.id}/exports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: exportType, quality }),
+      });
+      downloadRefreshCount = 0;
+      clearTimeout(downloadRefreshTimer);
+      downloadRefreshTimer = setTimeout(() => {
+        if (state.selectedAsset) loadDownloads(state.selectedAsset, true);
+      }, 3000);
+    } catch (error) {
+      item.disabled = false;
+      item.querySelector(".prepareLabel").textContent = "Prepare";
+      setAlert(error.message || "Could not start export.", 4000);
+    }
+  }
 }
 
 async function loadWorkflow(asset) {

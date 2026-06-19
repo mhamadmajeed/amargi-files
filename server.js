@@ -791,6 +791,7 @@ function normalizeRetentionDays(value) {
 
 const VIDEO_RENDITIONS = [
   { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23", preset: "veryfast" },
+  { quality: "720", label: "720p", maxWidth: 1280, crf: "25", preset: "veryfast" },
   { quality: "480", label: "480p", maxWidth: 854, crf: "28", preset: "ultrafast" },
 ];
 const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "1080,480").split(",").map((item) => item.trim()).filter(Boolean));
@@ -2397,25 +2398,25 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
       });
     }
     if (isVideo(file) && originalExists) {
-      // Queue the file for export if it has missing renditions (once per server session)
       const jobs = file.exportJobs || {};
-      const needsRendition = VIDEO_RENDITIONS.some((r) => !renditionEntries.some((e) => e.quality === r.quality) && jobs[r.quality] !== "skipped");
       const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
       const hasAudio = await objectExists(expectedAudioKey);
-      const needsAudio = !hasAudio && jobs.mp3 !== "skipped";
-      if (needsRendition || needsAudio) queueExport(file.id);
+      const ffmpegAvailableForExport = Boolean(getFfmpegPath());
 
-      // ── Show pending video renditions ──
+      // ── Show video renditions not yet ready ──
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = jobs[rendition.quality] || "";
         if (status === "skipped") continue;
-        const isActive = status === "processing" || exportQueuedIds.has(file.id);
+        const isGenerating = status === "processing";
         downloads.push({
           key: `pending-${rendition.quality}`,
           label: `${rendition.label} MP4`,
-          detail: isActive ? "Generating…" : "Queued",
-          pending: true,
-          generating: isActive,
+          detail: isGenerating ? "Generating… check back soon" : ffmpegAvailableForExport ? "Click Prepare to generate" : "FFmpeg not available on this server",
+          pending: !isGenerating,
+          generating: isGenerating,
+          prepare: !isGenerating && ffmpegAvailableForExport,
+          exportType: "video",
+          quality: rendition.quality,
         });
       }
 
@@ -2428,8 +2429,16 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
           url: await signedGetUrl(expectedAudioKey, `attachment; filename="${fileBaseName(file.name)}.mp3"`, 60 * 30),
         });
       } else if (jobs.mp3 !== "skipped") {
-        const isActive = jobs.mp3 === "processing" || exportQueuedIds.has(file.id);
-        downloads.push({ key: "pending-mp3", label: "MP3 audio", detail: isActive ? "Generating…" : "Queued", pending: true, generating: isActive });
+        const isGenerating = jobs.mp3 === "processing";
+        downloads.push({
+          key: "pending-mp3",
+          label: "MP3 audio",
+          detail: isGenerating ? "Generating… check back soon" : ffmpegAvailableForExport ? "Click Prepare to generate" : "FFmpeg not available on this server",
+          pending: !isGenerating,
+          generating: isGenerating,
+          prepare: !isGenerating && ffmpegAvailableForExport,
+          exportType: "audio",
+        });
       }
     }
     if (!renditionEntries.length && file.proxyKey) {

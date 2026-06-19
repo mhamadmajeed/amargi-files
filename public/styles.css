@@ -8252,6 +8252,20 @@ body.reviewMode .downloadMenuItem em { color: #7b93ff !important; font-style: no
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.downloadMenuItem.prepareBtn { cursor: pointer; opacity: 1; }
+.downloadMenuItem.prepareBtn:hover { background: #141d2b; }
+.downloadMenuItem.prepareBtn .prepareLabel {
+  color: #5b8dee;
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.downloadMenuItem.generating { cursor: wait; opacity: 0.75; }
+.downloadMenuItem.unavailable { cursor: default; opacity: 0.35; }
+body.reviewMode .downloadMenuItem.prepareBtn .prepareLabel { color: #7b93ff !important; }
+body.reviewMode .downloadMenuItem.prepareBtn:hover { background: #141d2c !important; }
+
 /* 3. Alert floats over player */
 body.reviewMode #alert {
   position: fixed !important;
