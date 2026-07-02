@@ -9447,16 +9447,35 @@ body:not(.reviewMode) .assetGrid.listView .assetOpen,
   color: #ff9fb3;
 }
 
-/* ── Comment composer: room for 3-4 lines ── */
+/* ── Comment composer: timecode above, full-width box, 3-4 lines ── */
+body.reviewMode .commentForm {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+}
+
+body.reviewMode .commentForm .commentTimecodeStamp {
+  align-self: flex-start !important;
+  margin: 0 0 6px 1px !important;
+  padding: 1px 6px !important;
+  font-size: 0.6rem !important;
+}
+
 body.reviewMode .commentInputRow {
+  width: 100% !important;
   align-items: flex-end !important;
 }
 
-body.reviewMode .commentInputRow .commentTimecodeStamp {
-  align-self: flex-start !important;
-}
-
 body.reviewMode #commentInput {
+  flex: 1 1 auto !important;
+  width: 100% !important;
   min-height: 76px !important;
   max-height: 150px !important;
+}
+
+/* Subtle dim while a folder's contents load — instant click feedback */
+.assetGrid.isLoadingAssets {
+  opacity: 0.55;
+  transition: opacity 100ms ease;
 }

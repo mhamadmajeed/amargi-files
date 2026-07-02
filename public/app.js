@@ -1117,6 +1117,7 @@ async function goToFolder(id) {
   expandFolderAncestors(id);
   persistFolderLocation();
   pushFolderUrl(id);
+  renderFolderTree(); // mark the clicked folder active immediately
   await loadFolder();
 }
 
@@ -1129,11 +1130,20 @@ async function loadFolder({ skipTreeReload = false } = {}) {
   elements.createFolderButton.disabled = false;
   elements.uploadButton.disabled = false;
   replaceFolderUrl(current.id);
-  const { data } = await api(`/api/accounts/${state.currentAccountId}/folders/${current.id}/children`);
+  // Children and folder tree load in parallel — they hit independent endpoints.
+  elements.folderList.classList.add("isLoadingAssets");
+  let data;
+  try {
+    [{ data }] = await Promise.all([
+      api(`/api/accounts/${state.currentAccountId}/folders/${current.id}/children`),
+      skipTreeReload ? Promise.resolve() : loadFolderTree(),
+    ]);
+  } finally {
+    elements.folderList.classList.remove("isLoadingAssets");
+  }
   state.assets = data.sort(assetSort);
   persistFolderLocation();
   if (skipTreeReload) renderFolderTree();
-  else await loadFolderTree();
   renderAssets();
   loadAssetWorkflows();
 

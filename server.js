@@ -702,14 +702,31 @@ async function streamToString(stream) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// Short-lived cache over the R2-backed metadata JSON. Without it every API
+// request re-downloads media-db.json (and friends) from R2, adding 200-500ms
+// per read; a folder click or comment post stacks several of those. Writes go
+// straight to R2 and refresh the cache, so a single server never reads stale
+// data from itself. Cross-instance staleness is bounded by the TTL.
+const R2_JSON_CACHE_TTL_MS = Number(process.env.METADATA_CACHE_TTL_MS || 4000);
+const r2JsonCache = new Map();
+
 async function readR2Json(name, fallback) {
   if (!hasR2Config()) return fallback;
+  const cached = r2JsonCache.get(name);
+  if (cached && Date.now() - cached.time < R2_JSON_CACHE_TTL_MS) {
+    return cached.missing ? fallback : JSON.parse(cached.raw);
+  }
   const config = getR2Config();
   try {
     const result = await getR2Client().send(new GetObjectCommand({ Bucket: config.bucket, Key: metadataKey(name) }));
-    return JSON.parse(await streamToString(result.Body));
+    const raw = await streamToString(result.Body);
+    r2JsonCache.set(name, { raw, time: Date.now() });
+    return JSON.parse(raw);
   } catch (error) {
-    if (error.name === "NoSuchKey" || error.$metadata?.httpStatusCode === 404) return fallback;
+    if (error.name === "NoSuchKey" || error.$metadata?.httpStatusCode === 404) {
+      r2JsonCache.set(name, { missing: true, time: Date.now() });
+      return fallback;
+    }
     throw error;
   }
 }
@@ -717,14 +734,16 @@ async function readR2Json(name, fallback) {
 async function writeR2Json(name, value) {
   if (!hasR2Config()) return;
   const config = getR2Config();
+  const raw = JSON.stringify(value, null, 2);
   await getR2Client().send(
     new PutObjectCommand({
       Bucket: config.bucket,
       Key: metadataKey(name),
-      Body: JSON.stringify(value, null, 2),
+      Body: raw,
       ContentType: "application/json",
     }),
   );
+  r2JsonCache.set(name, { raw, time: Date.now() });
 }
 
 function extensionFor(name) {
@@ -921,7 +940,11 @@ function shouldStartProxyJob(file) {
 }
 
 function getFfmpegPath() {
-  return process.env.FFMPEG_PATH || ffmpegInstaller?.path || "";
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  // Serverless cannot run transcodes: execution freezes after the response and
+  // long jobs hit time limits. The studio (local) server sweeps these up instead.
+  if (process.env.VERCEL === "1") return "";
+  return ffmpegInstaller?.path || "";
 }
 
 // Returns { longSide, duration } using ffprobe, zeros on failure.
@@ -1308,14 +1331,19 @@ async function generateVideoProxy(fileId, options = {}) {
       await writeMediaDb(db);
     }
     if (includeAudio) {
-      const audioPath = path.join(tempDir, "audio.mp3");
-      await runFfmpeg(["-y", "-threads", "0", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "128k", "-q:a", "4", audioPath], "MP3 export");
-      await fs.access(audioPath);
-      const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
-      await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
-      file.audioKey = audioKey;
-      file.audioStatus = "ready";
-      file.exportJobs.mp3 = "ready";
+      if (!force && file.audioKey && await objectExists(file.audioKey)) {
+        file.audioStatus = "ready";
+        file.exportJobs.mp3 = "ready";
+      } else {
+        const audioPath = path.join(tempDir, "audio.mp3");
+        await runFfmpeg(["-y", "-threads", "0", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "128k", "-q:a", "4", audioPath], "MP3 export");
+        await fs.access(audioPath);
+        const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
+        await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
+        file.audioKey = audioKey;
+        file.audioStatus = "ready";
+        file.exportJobs.mp3 = "ready";
+      }
     }
     file.proxyStatus = file.proxyKey || file.thumbnailKey ? "ready" : "pending";
     file.proxyStartedAt = "";
@@ -2511,7 +2539,7 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
         downloads.push({
           key: `pending-${rendition.quality}`,
           label: `${rendition.label} MP4`,
-          detail: isGenerating ? "Generating… check back soon" : ffmpegAvailableForExport ? "Click Prepare to generate" : "FFmpeg not available on this server",
+          detail: isGenerating ? "Generating… check back soon" : ffmpegAvailableForExport ? "Click Prepare to generate" : "Prepared automatically when the studio server is online",
           pending: !isGenerating,
           generating: isGenerating,
           prepare: !isGenerating && ffmpegAvailableForExport,
@@ -2533,7 +2561,7 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
         downloads.push({
           key: "pending-mp3",
           label: "MP3 audio",
-          detail: isGenerating ? "Generating… check back soon" : ffmpegAvailableForExport ? "Click Prepare to generate" : "FFmpeg not available on this server",
+          detail: isGenerating ? "Generating… check back soon" : ffmpegAvailableForExport ? "Click Prepare to generate" : "Prepared automatically when the studio server is online",
           pending: !isGenerating,
           generating: isGenerating,
           prepare: !isGenerating && ffmpegAvailableForExport,
@@ -2801,8 +2829,12 @@ app.post("/api/accounts/:accountId/files/:fileId/comments", requireAppSession, a
       created_at: new Date().toISOString(),
     };
     db.comments[file.id] = [...(db.comments[file.id] || []), comment];
-    await writeMediaDb(db);
-    await recordActivity(request, "comment.created", { type: "comment", id: comment.id, fileId: file.id, fileName: file.name, projectId: file.projectId }, { timestamp: comment.timestamp, textLength: comment.text.length });
+    // The comment and the activity entry live in different R2 objects — write
+    // them concurrently so posting costs one round-trip, not two.
+    await Promise.all([
+      writeMediaDb(db),
+      recordActivity(request, "comment.created", { type: "comment", id: comment.id, fileId: file.id, fileName: file.name, projectId: file.projectId }, { timestamp: comment.timestamp, textLength: comment.text.length }),
+    ]);
     const users = await readUsers();
     const mentions = mentionedUsers(comment.text, users, request.appUser.email);
     const actorName = request.appUser.name || request.appUser.email;
@@ -2910,17 +2942,22 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
       updatedAt: new Date().toISOString(),
       updatedBy: request.appUser.email,
     };
-    await writeWorkflows(workflows);
     const dbForActivity = await readMediaDb();
     const workflowFile = getFileRecord(dbForActivity, request.params.fileId);
-    await recordActivity(request, "workflow.updated", { type: "file", id: workflowFile.id, name: workflowFile.name, projectId: workflowFile.projectId, folderId: workflowFile.folderId }, {
-      previousAssignees,
-      assigneeEmails: normalizedAssignees,
-      previousStatus: previous.status,
-      status: normalizedStatus,
-    });
+    await Promise.all([
+      writeWorkflows(workflows),
+      recordActivity(request, "workflow.updated", { type: "file", id: workflowFile.id, name: workflowFile.name, projectId: workflowFile.projectId, folderId: workflowFile.folderId }, {
+        previousAssignees,
+        assigneeEmails: normalizedAssignees,
+        previousStatus: previous.status,
+        status: normalizedStatus,
+      }),
+    ]);
     const newlyAssigned = assignees.filter((user) => !previousAssignees.includes(normalizeEmail(user.email)));
-    await Promise.all(newlyAssigned.map((assignee) => recordNotification({
+    // Respond before notifications: SMTP sends can take seconds and made
+    // status changes feel stuck. Same fire-and-forget pattern as comments.
+    response.json({ data: workflowFor(request.params.fileId, workflows, users) });
+    Promise.all(newlyAssigned.map((assignee) => recordNotification({
         type: "assignment",
         to: assignee.email,
         subject: `You were assigned to ${workflowFile.name}`,
@@ -2937,13 +2974,13 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
         url: reviewUrl(request, workflowFile.id),
         status: normalizedStatus,
         actor: request.appUser.email,
-      })));
+      }))).catch(() => {});
     if (normalizedStatus === "rejected" && previous.status !== "rejected") {
       const rejectionRecipients = Array.from(new Set([
         normalizeEmail(workflowFile.ownerEmail),
         ...normalizedAssignees,
       ].filter(Boolean)));
-      await Promise.all(rejectionRecipients.map((email) => recordNotification({
+      Promise.all(rejectionRecipients.map((email) => recordNotification({
         type: "rejection",
         to: email,
         subject: `${workflowFile.name} was rejected`,
@@ -2960,9 +2997,8 @@ app.patch("/api/files/:fileId/workflow", requireAppSession, async (request, resp
         url: reviewUrl(request, workflowFile.id),
         status: normalizedStatus,
         actor: request.appUser.email,
-      })));
+      }))).catch(() => {});
     }
-    response.json({ data: workflowFor(request.params.fileId, workflows, users) });
   } catch (error) {
     next(error);
   }
@@ -3171,20 +3207,27 @@ async function cleanStuckExportJobs() {
   }
 }
 
+let exportSweepRunning = false;
+
 async function requeuePendingProxies() {
-  if (!getFfmpegPath() || !hasR2Config()) return;
+  if (exportSweepRunning || !getFfmpegPath() || !hasR2Config()) return;
+  exportSweepRunning = true;
   try {
     const db = await readMediaDb();
-    // Find all video files that have any unfinished export job (pending, processing, failed, or not started)
+    // Find videos with unfinished AUTO exports (on-demand qualities like 720
+    // don't count) — existing rendition/audio objects also count as done, so
+    // legacy files without exportJobs bookkeeping are not reprocessed.
+    const autoRenditions = VIDEO_RENDITIONS.filter((r) => AUTO_VIDEO_RENDITION_QUALITIES.has(r.quality));
     const toProcess = (db.files || []).filter((f) => {
       if (!f.r2Key || f.deletedAt || !isVideo(f)) return false;
-      // Any rendition or audio not yet ready/skipped
       const jobs = f.exportJobs || {};
-      const needsWork = VIDEO_RENDITIONS.some((r) => {
+      const missingRendition = autoRenditions.some((r) => {
         const s = jobs[r.quality] || "";
-        return s !== "ready" && s !== "skipped";
-      }) || (jobs.mp3 !== "ready");
-      return needsWork;
+        if (s === "ready" || s === "skipped") return false;
+        return !f.renditions?.[r.quality]?.key;
+      });
+      const missingAudio = jobs.mp3 !== "ready" && jobs.mp3 !== "skipped" && !f.audioKey;
+      return missingRendition || missingAudio;
     });
     if (!toProcess.length) return;
     // Reset stuck "processing" state so jobs can restart
@@ -3198,20 +3241,20 @@ async function requeuePendingProxies() {
       }
     }
     if (changed) await writeMediaDb(db);
-    console.log(`[Startup] Queuing ${toProcess.length} file(s) for export…`);
+    console.log(`[Sweep] Queuing ${toProcess.length} file(s) for export…`);
     // Process one at a time to avoid freezing
-    (async () => {
-      for (const f of toProcess) {
-        try {
-          await runExportJob(f.id, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
-        } catch (err) {
-          console.error(`[Startup] Export failed for ${f.name}:`, err.message);
-        }
+    for (const f of toProcess) {
+      try {
+        await runExportJob(f.id, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
+      } catch (err) {
+        console.error(`[Sweep] Export failed for ${f.name}:`, err.message);
       }
-      console.log("[Startup] Export queue complete.");
-    })();
+    }
+    console.log("[Sweep] Export queue complete.");
   } catch (err) {
-    console.error("[Startup] requeuePendingProxies error:", err.message);
+    console.error("[Sweep] requeuePendingProxies error:", err.message);
+  } finally {
+    exportSweepRunning = false;
   }
 }
 
@@ -3230,6 +3273,12 @@ if (require.main === module) {
     console.log(`MediaFlow running at http://localhost:${port}`);
     applyR2CorsOnStartup();
     cleanStuckExportJobs();
+    // Sweep for videos uploaded through Vercel (which cannot transcode) so
+    // their renditions generate whenever this studio server is running.
+    if (getFfmpegPath()) {
+      setTimeout(requeuePendingProxies, 15 * 1000);
+      setInterval(requeuePendingProxies, 5 * 60 * 1000);
+    }
   });
   getHttpsCredentials()
     .then((credentials) => {
