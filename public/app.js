@@ -30,6 +30,7 @@ const elements = {
   accountSelect: $("#accountSelect"),
   workspaceSelect: $("#workspaceSelect"),
   projectSelect: $("#projectSelect"),
+  projectTabs: $("#projectTabs"),
   folderTree: $("#folderTree"),
   sidebarCreateFolderButton: $("#sidebarCreateFolderButton"),
   adminPanel: $("#adminPanel"),
@@ -91,6 +92,7 @@ const elements = {
   gridViewButton: $("#gridViewButton"),
   listViewButton: $("#listViewButton"),
   assetCount: $("#assetCount"),
+  selectAllAssets: $("#selectAllAssets"),
   folderList: $("#folderList"),
   dropOverlay: $("#dropOverlay"),
   assetContextMenu: $("#assetContextMenu"),
@@ -181,6 +183,10 @@ const state = {
   destinationPicker: null,
   activeUploadProgressId: "",
   draggedAsset: null,
+  selectedAssetIds: new Set(),
+  lastSelectedAssetId: "",
+  workflowByFileId: {},
+  treeMonthLastActiveId: "",
 };
 
 const RECENT_LOCATION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -257,6 +263,35 @@ function applyProjectColor(project, allProjects = []) {
   root.style.setProperty("--project-accent", color.accent);
   root.style.setProperty("--project-bg", color.bg);
   root.style.setProperty("--project-glow", color.glow);
+}
+
+function projectColor(project, allProjects = state.projects) {
+  const idx = allProjects.findIndex((p) => p.id === project?.id);
+  return PROJECT_COLORS[Math.max(0, idx) % PROJECT_COLORS.length];
+}
+
+function renderProjectTabs() {
+  if (!elements.projectTabs) return;
+  elements.projectTabs.innerHTML = state.projects.map((project) => {
+    const active = project.id === state.currentProject?.id;
+    const color = projectColor(project);
+    return `<button type="button" class="projectTab ${active ? "active" : ""}" data-project-id="${escapeHtml(project.id)}" aria-pressed="${active ? "true" : "false"}" title="${escapeHtml(project.name)}">
+      <span class="projectTabDot" style="background:${color.accent}"></span>${escapeHtml(project.name)}
+    </button>`;
+  }).join("");
+}
+
+async function switchProject(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project || project.id === state.currentProject?.id) return;
+  state.currentProject = project;
+  localStorage.setItem("mediaflow_project", project.id);
+  elements.projectSelect.value = project.id;
+  elements.workspaceTitle.textContent = project.name;
+  applyProjectColor(project, state.projects);
+  renderProjectTabs();
+  clearAssetSelection({ render: false });
+  await enterDefaultProjectFolder();
 }
 
 function formatTime(seconds = 0) {
@@ -831,6 +866,7 @@ async function loadProjects() {
   elements.projectSelect.value = state.currentProject.id;
   elements.workspaceTitle.textContent = state.currentProject.name;
   applyProjectColor(state.currentProject, data);
+  renderProjectTabs();
   await enterDefaultProjectFolder(recentLocation);
 }
 
@@ -1099,6 +1135,7 @@ async function loadFolder({ skipTreeReload = false } = {}) {
   if (skipTreeReload) renderFolderTree();
   else await loadFolderTree();
   renderAssets();
+  loadAssetWorkflows();
 
   // Deep-link: if URL has ?file=id, reopen that file after folder loads
   const urlFileId = new URLSearchParams(location.search).get("file");
@@ -1128,6 +1165,44 @@ function folderTreeIcon() {
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg>`;
 }
 
+const MONTH_FOLDER_RE = /^(0[1-9]|1[0-2])_[A-Za-z]+$/;
+
+function projectMonthFolders(project = state.currentProject, folders = state.folderTree) {
+  if (!project) return [];
+  return folders
+    .filter((folder) => folder.parent_id === project.root_folder_id && MONTH_FOLDER_RE.test(folder.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function monthAncestorId(folderId, project = state.currentProject, folders = state.folderTree) {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  let current = byId.get(folderId);
+  while (current) {
+    if (current.parent_id === project?.root_folder_id && MONTH_FOLDER_RE.test(current.name)) return current.id;
+    current = byId.get(current.parent_id);
+  }
+  return "";
+}
+
+// The tree shows one month at a time. Returns the month folder id to show, or
+// "all". Follows navigation into another month; otherwise keeps the pick.
+function resolveTreeMonthFilter(monthFolders, activeId, currentMonthId) {
+  const key = `mediaflow_tree_month_${state.currentProject.id}`;
+  let filter = localStorage.getItem(key) || "";
+  const activeMonthId = monthAncestorId(activeId);
+  if (activeId && activeId !== state.treeMonthLastActiveId && activeMonthId) filter = activeMonthId;
+  state.treeMonthLastActiveId = activeId;
+  if (filter !== "all" && !monthFolders.some((folder) => folder.id === filter)) {
+    filter = currentMonthId || monthFolders[0]?.id || "all";
+  }
+  localStorage.setItem(key, filter);
+  return filter;
+}
+
+function monthFolderLabel(name) {
+  return name.replace(/^\d{2}_/, "");
+}
+
 function renderFolderTree() {
   if (!elements.folderTree || !state.currentProject) return;
   const activeId = currentFolder()?.id || "";
@@ -1138,13 +1213,29 @@ function renderFolderTree() {
     if (!byParent.has(parentId)) byParent.set(parentId, []);
     byParent.get(parentId).push(folder);
   }
+  const monthFolders = projectMonthFolders();
+  let monthBar = "";
+  let monthFilter = "";
+  if (monthFolders.length) {
+    monthFilter = resolveTreeMonthFilter(monthFolders, activeId, currentMonthId);
+    monthBar = `<div class="folderTreeMonthBar">
+      <span class="folderTreeMonthLabel">Month</span>
+      <select id="treeMonthSelect" aria-label="Show month">
+        ${monthFolders.map((folder) => `<option value="${escapeHtml(folder.id)}" ${folder.id === monthFilter ? "selected" : ""}>${escapeHtml(monthFolderLabel(folder.name))}${folder.id === currentMonthId ? " (now)" : ""}</option>`).join("")}
+        <option value="all" ${monthFilter === "all" ? "selected" : ""}>All months</option>
+      </select>
+    </div>`;
+  }
+  const hiddenMonthIds = monthFilter && monthFilter !== "all"
+    ? new Set(monthFolders.filter((folder) => folder.id !== monthFilter).map((folder) => folder.id))
+    : new Set();
   const roots = byParent.get("root") || state.folderTree.filter((folder) => folder.id === state.currentProject.root_folder_id);
   const renderNode = (folder, depth = 0) => {
-    const children = (byParent.get(folder.id) || []).sort(assetSort);
+    const children = (byParent.get(folder.id) || []).filter((child) => !hiddenMonthIds.has(child.id)).sort(assetSort);
     const isActive = folder.id === activeId;
     const isRoot = folder.id === state.currentProject.root_folder_id;
     const isCurrentMonth = folder.id === currentMonthId;
-    const isExpanded = isRoot || isCurrentMonth || state.folderTreeExpanded.has(folder.id);
+    const isExpanded = isRoot || isCurrentMonth || folder.id === monthFilter || state.folderTreeExpanded.has(folder.id);
     const count = (folder.folder_count || 0) + (folder.file_count || 0);
     return `<div class="folderTreeNode" style="--depth:${depth}">
       <button class="folderTreeItem ${isActive ? "active" : ""} ${isRoot ? "rootItem" : ""}" type="button" data-folder-id="${escapeHtml(folder.id)}" title="${escapeHtml(folder.name)}">
@@ -1157,7 +1248,7 @@ function renderFolderTree() {
       ${children.length && isExpanded ? `<div class="folderTreeChildren">${children.map((child) => renderNode(child, depth + 1)).join("")}</div>` : ""}
     </div>`;
   };
-  elements.folderTree.innerHTML = roots.map((folder) => renderNode(folder)).join("") || `<p class="folderTreeEmpty">No folders yet</p>`;
+  elements.folderTree.innerHTML = monthBar + (roots.map((folder) => renderNode(folder)).join("") || `<p class="folderTreeEmpty">No folders yet</p>`);
 }
 
 function getFolderDescendantIds(folderId, folders = state.folderTree) {
@@ -1213,13 +1304,220 @@ function assetIcon(kind) {
   return icons[kind] || icons.file;
 }
 
+function assetRetentionMarkup(asset) {
+  if (asset.type !== "file") return "";
+  if (asset.retention_expires_at) {
+    const date = new Date(asset.retention_expires_at);
+    if (Number.isNaN(date.getTime())) return "";
+    const label = date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return `<span class="assetRetention retentionDate" title="Scheduled for deletion on ${escapeHtml(label)}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${escapeHtml(label)}
+    </span>`;
+  }
+  return `<span class="assetRetention retentionPermanent" title="Kept permanently">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 15.5C4.6 15.5 3 13.9 3 12s1.6-3.5 3.6-3.5c3.4 0 7.4 7 10.8 7 2 0 3.6-1.6 3.6-3.5s-1.6-3.5-3.6-3.5c-3.4 0-7.4 7-10.8 7z"/></svg>Permanent
+  </span>`;
+}
+
+const WORKFLOW_STATUS_META = {
+  work_in_progress: { label: "In progress" },
+  rejected: { label: "Rejected" },
+  approved: { label: "Approved" },
+  published: { label: "Published" },
+};
+
+function retentionDaysLeft(asset) {
+  if (!asset.retention_expires_at) return null;
+  const expires = Date.parse(asset.retention_expires_at);
+  if (Number.isNaN(expires)) return null;
+  return Math.max(0, Math.ceil((expires - Date.now()) / 86400000));
+}
+
+function assetThumbBarMarkup(asset) {
+  if (asset.type !== "file") return "";
+  const days = retentionDaysLeft(asset);
+  const retention = days === null
+    ? `<span class="thumbRetention permanent" title="Kept permanently"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 15.5C4.6 15.5 3 13.9 3 12s1.6-3.5 3.6-3.5c3.4 0 7.4 7 10.8 7 2 0 3.6-1.6 3.6-3.5s-1.6-3.5-3.6-3.5c-3.4 0-7.4 7-10.8 7z"/></svg></span>`
+    : `<span class="thumbRetention" title="Scheduled for deletion in ${days} day${days === 1 ? "" : "s"}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${days}d</span>`;
+  const duration = Number(asset.duration) > 0 ? `<span class="thumbDuration">${formatTime(asset.duration)}</span>` : "";
+  return `<div class="assetThumbBar">${retention}${duration}</div>`;
+}
+
+function uploaderChipMarkup(email) {
+  if (!email) return `<span class="uploaderChip empty"></span>`;
+  const hue = [...String(email)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  return `<span class="uploaderChip" title="${escapeHtml(email)}"><i style="background:hsl(${hue} 60% 52%)">${escapeHtml(email[0].toUpperCase())}</i><em>${escapeHtml(email)}</em></span>`;
+}
+
+function assetStatusMarkup(asset) {
+  const status = state.workflowByFileId[asset.id]?.status || "";
+  const meta = WORKFLOW_STATUS_META[status];
+  return `<button type="button" class="assetStatus" data-status="${escapeHtml(status)}" title="Change status">${meta ? escapeHtml(meta.label) : "&hellip;"}</button>`;
+}
+
+function assetDetailsMarkup(asset, created) {
+  if (asset.type !== "file") {
+    return `<div class="assetDetails assetDetails-folder"><span class="assetStatus placeholder" aria-hidden="true"></span><span class="assetDate">${escapeHtml(created)}</span><span class="uploaderChip empty"></span><span class="assetComments"></span></div>`;
+  }
+  return `<div class="assetDetails">
+    ${assetStatusMarkup(asset)}
+    <span class="assetDate">${escapeHtml(created)}</span>
+    ${uploaderChipMarkup(asset.owner)}
+    <span class="assetComments" title="Comments"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2.5-2.7A8 8 0 1 1 21 12z"/></svg>${Number(asset.comment_count) || 0}</span>
+  </div>`;
+}
+
+async function loadAssetWorkflows() {
+  const fileIds = state.assets.filter((asset) => asset.type === "file").map((asset) => asset.id);
+  if (!fileIds.length) return;
+  try {
+    const { data } = await api("/api/workflows/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileIds }),
+    });
+    Object.assign(state.workflowByFileId, data || {});
+    refreshAssetStatusPills();
+  } catch {
+    // Status pills stay in loading state; next folder load retries.
+  }
+}
+
+function refreshAssetStatusPills() {
+  elements.folderList.querySelectorAll('.assetCard[data-type="file"] .assetStatus').forEach((pill) => {
+    const card = pill.closest(".assetCard");
+    const workflow = state.workflowByFileId[card?.dataset.id];
+    const meta = WORKFLOW_STATUS_META[workflow?.status];
+    if (!meta) return;
+    pill.dataset.status = workflow.status;
+    pill.textContent = meta.label;
+  });
+}
+
+function closeStatusMenu() {
+  document.getElementById("assetStatusMenu")?.remove();
+}
+
+function showStatusMenu(asset, pill) {
+  closeStatusMenu();
+  hideContextMenu();
+  const current = state.workflowByFileId[asset.id]?.status || "";
+  const menu = document.createElement("div");
+  menu.id = "assetStatusMenu";
+  menu.className = "fileContextMenu statusMenu";
+  menu.innerHTML = Object.entries(WORKFLOW_STATUS_META).map(([value, meta]) =>
+    `<button type="button" role="menuitem" data-status-value="${value}"><span class="statusDot" data-status="${value}"></span><span>${escapeHtml(meta.label)}</span>${value === current ? `<em aria-hidden="true">&#10003;</em>` : ""}</button>`).join("");
+  document.body.appendChild(menu);
+  const rect = pill.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(10, Math.min(rect.left, window.innerWidth - menuRect.width - 10))}px`;
+  menu.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - menuRect.height - 10)}px`;
+  menu.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-status-value]");
+    if (!button) return;
+    closeStatusMenu();
+    await setAssetStatus(asset, button.dataset.statusValue);
+  });
+}
+
+// Store duration the first time the review player learns it, so cards can
+// show a duration badge for files uploaded before server-side probing existed.
+async function backfillAssetDuration() {
+  const asset = state.selectedAsset;
+  const duration = Math.round(elements.videoPlayer.duration || 0);
+  if (!asset || Number(asset.duration) > 0 || !Number.isFinite(duration) || duration <= 0) return;
+  asset.duration = duration;
+  const listed = state.assets.find((item) => item.id === asset.id);
+  if (listed) listed.duration = duration;
+  try {
+    await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duration }),
+    });
+  } catch {
+    // Cosmetic backfill; ignore failures.
+  }
+}
+
+async function setAssetStatus(asset, status) {
+  const workflow = state.workflowByFileId[asset.id] || {};
+  try {
+    const { data } = await api(`/api/files/${asset.id}/workflow`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, assigneeEmails: workflow.assigneeEmails || [] }),
+    });
+    state.workflowByFileId[asset.id] = data || { ...workflow, status };
+    refreshAssetStatusPills();
+    if (state.selectedAsset?.id === asset.id && elements.statusSelect) {
+      elements.statusSelect.value = state.workflowByFileId[asset.id].status || "work_in_progress";
+      updateWorkflowAppearance();
+    }
+  } catch (error) {
+    setAlert(error.message || "Could not update status.", 4000);
+  }
+}
+
+function selectedAssets() {
+  return state.assets.filter((asset) => state.selectedAssetIds.has(asset.id));
+}
+
+function clearAssetSelection({ render = true } = {}) {
+  state.selectedAssetIds.clear();
+  state.lastSelectedAssetId = "";
+  if (render) applyAssetSelection();
+}
+
+function setAssetSelection(ids = [], { anchor = "" } = {}) {
+  state.selectedAssetIds = new Set(ids.filter(Boolean));
+  state.lastSelectedAssetId = anchor || ids[ids.length - 1] || "";
+  applyAssetSelection();
+}
+
+function assetRangeIds(fromId, toId) {
+  const start = state.assets.findIndex((asset) => asset.id === fromId);
+  const end = state.assets.findIndex((asset) => asset.id === toId);
+  if (start < 0 || end < 0) return [toId].filter(Boolean);
+  const [min, max] = start < end ? [start, end] : [end, start];
+  return state.assets.slice(min, max + 1).map((asset) => asset.id);
+}
+
+function updateAssetSummary() {
+  const count = state.selectedAssetIds.size;
+  const summarySize = (items) => {
+    const bytes = items.reduce((total, item) => total + (Number(item.filesize || item.size) || 0), 0);
+    return bytes ? ` • ${formatBytes(bytes)}` : "";
+  };
+  if (count) {
+    elements.assetCount.textContent = `${count} selected${summarySize(selectedAssets())}`;
+  } else {
+    const total = state.assets.length;
+    elements.assetCount.textContent = `${total} asset${total === 1 ? "" : "s"}${summarySize(state.assets)}`;
+  }
+  if (elements.selectAllAssets) {
+    elements.selectAllAssets.disabled = !state.assets.length;
+    elements.selectAllAssets.checked = state.assets.length > 0 && count === state.assets.length;
+    elements.selectAllAssets.indeterminate = count > 0 && count < state.assets.length;
+  }
+}
+
+function applyAssetSelection() {
+  elements.folderList.querySelectorAll(".assetCard[data-id]").forEach((card) => {
+    const selected = state.selectedAssetIds.has(card.dataset.id);
+    card.classList.toggle("selected", selected);
+    card.setAttribute("aria-selected", selected ? "true" : "false");
+  });
+  updateAssetSummary();
+}
+
 function renderAssets() {
   elements.folderList.className = state.view === "list" ? "assetGrid listView" : "assetGrid";
   elements.gridViewButton.classList.toggle("active", state.view === "grid");
   elements.listViewButton.classList.toggle("active", state.view === "list");
-  const folders = state.assets.filter((item) => item.type === "folder").length;
-  const files = state.assets.length - folders;
-  elements.assetCount.textContent = `${folders} folders - ${files} files`;
+  const visibleIds = new Set(state.assets.map((asset) => asset.id));
+  state.selectedAssetIds = new Set([...state.selectedAssetIds].filter((id) => visibleIds.has(id)));
+  updateAssetSummary();
   if (!state.assets.length) {
     elements.folderList.innerHTML = `<button class="emptyAssets fileBrowserEmpty" type="button">
       <span class="emptyAssetsIcon">${assetIcon("folder")}</span>
@@ -1228,27 +1526,38 @@ function renderAssets() {
     </button>`;
     return;
   }
-  elements.folderList.innerHTML = state.assets.map((asset) => {
+  const listHeader = state.view === "list" ? `<div class="assetListHeader" aria-hidden="true">
+    <span class="assetListHeaderName">Name</span>
+    <span>Status</span>
+    <span>Date uploaded</span>
+    <span>Uploader</span>
+    <span class="assetListHeaderComments"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2.5-2.7A8 8 0 1 1 21 12z"/></svg></span>
+  </div>` : "";
+  elements.folderList.innerHTML = listHeader + state.assets.map((asset) => {
     const kind = assetKind(asset);
     const created = formatDateTime(asset.created_at);
-    const meta = asset.type === "folder" ? `Folder${created ? ` - ${created}` : ""}` : `${asset.mimetype || "File"} - ${formatBytes(asset.filesize || asset.size)}${created ? ` - ${created}` : ""}`;
+    const meta = asset.type === "folder" ? `Folder${created ? ` - ${created}` : ""}` : `${asset.mimetype || "File"} - ${formatBytes(asset.filesize || asset.size)}`;
     const hoverVideo = kind === "video" ? `<video class="assetHoverVideo" muted playsinline preload="none" data-preview-seconds="6" data-src="/api/accounts/${state.currentAccountId}/files/${asset.id}/playback"></video><span class="assetHoverProgress" aria-hidden="true"></span>` : "";
     const imagePreview = kind === "image" ? `/api/accounts/${state.currentAccountId}/files/${asset.id}/preview` : "";
     const thumbSrc = asset.thumbnail || imagePreview;
     const thumb = thumbSrc ? `<img src="${thumbSrc}" alt="">${hoverVideo}` : `<span class="assetIcon assetIcon-${kind}">${assetIcon(kind)}</span>${hoverVideo}`;
     const deleteButton = canDeleteAsset(asset) ? `<button class="deleteAsset iconMiniButton deleteFolderButton" type="button" aria-label="Delete ${escapeHtml(asset.name)}" title="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg></button>` : "";
-    return `<article class="assetCard assetCard-${kind}" data-id="${escapeHtml(asset.id)}" data-type="${asset.type}" draggable="true">
+    const selected = state.selectedAssetIds.has(asset.id);
+    return `<article class="assetCard assetCard-${kind} ${selected ? "selected" : ""}" data-id="${escapeHtml(asset.id)}" data-type="${asset.type}" draggable="true" tabindex="0" aria-selected="${selected ? "true" : "false"}">
+      <span class="assetSelectMark" aria-hidden="true"></span>
       <button class="assetOpen" type="button" title="${escapeHtml(asset.name)}" draggable="true">
-        <div class="assetThumb assetThumb-${kind}">${thumb}</div>
-        <div class="assetInfo"><strong>${escapeHtml(asset.name)}</strong><span>${escapeHtml(meta)}</span></div>
+        <div class="assetThumb assetThumb-${kind}">${thumb}${assetThumbBarMarkup(asset)}</div>
+        <div class="assetInfo"><strong>${escapeHtml(asset.name)}</strong><span>${escapeHtml(meta)}</span>${assetRetentionMarkup(asset)}</div>
         <span class="assetKindPill assetKindPill-${kind}">${escapeHtml(kind)}</span>
       </button>
+      ${assetDetailsMarkup(asset, created)}
       <div class="assetCardActions">
         <button class="renameAsset iconMiniButton" type="button" aria-label="Rename ${escapeHtml(asset.name)}" title="Rename"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 20 8-8-4-4-8 8-1 5z"/><path d="m14 6 4 4"/><path d="M5 20h14"/></svg></button>
         ${deleteButton}
       </div>
     </article>`;
   }).join("");
+  applyAssetSelection();
   setupHoverPreviews();
   generateMissingVideoThumbnails();
 }
@@ -1381,13 +1690,37 @@ async function generateMissingVideoThumbnails() {
 
 async function handleAssetClick(event) {
   const card = event.target.closest(".assetCard");
-  if (!card) return;
+  if (!card) {
+    if (event.target.closest("#folderList") && !event.ctrlKey && !event.metaKey && !event.shiftKey) clearAssetSelection();
+    return;
+  }
   const asset = state.assets.find((item) => item.id === card.dataset.id);
   if (!asset) return;
   if (event.target.closest(".renameAsset")) return renameAsset(asset);
   if (event.target.closest(".deleteAsset")) return deleteAsset(asset);
-  if (asset.type === "folder") await enterFolder(asset.id, asset.name);
-  else await selectAsset(asset);
+  const statusPill = event.target.closest(".assetStatus:not(.placeholder)");
+  if (statusPill && asset.type === "file") return showStatusMenu(asset, statusPill);
+  // The card checkbox always toggles, so clicking a checked box unchecks it.
+  if (event.target.closest(".assetSelectMark")) {
+    const next = new Set(state.selectedAssetIds);
+    if (next.has(asset.id)) next.delete(asset.id);
+    else next.add(asset.id);
+    setAssetSelection([...next], { anchor: asset.id });
+    return;
+  }
+  if (event.shiftKey) {
+    const rangeIds = assetRangeIds(state.lastSelectedAssetId || asset.id, asset.id);
+    setAssetSelection(Array.from(new Set([...state.selectedAssetIds, ...rangeIds])), { anchor: asset.id });
+    return;
+  }
+  if (event.ctrlKey || event.metaKey) {
+    const next = new Set(state.selectedAssetIds);
+    if (next.has(asset.id)) next.delete(asset.id);
+    else next.add(asset.id);
+    setAssetSelection([...next], { anchor: asset.id });
+    return;
+  }
+  setAssetSelection([asset.id], { anchor: asset.id });
 }
 
 async function handleAssetDoubleClick(event) {
@@ -1398,7 +1731,7 @@ async function handleAssetDoubleClick(event) {
   }
   const asset = state.assets.find((item) => item.id === card.dataset.id);
   if (!asset) return;
-  if (event.target.closest(".renameAsset, .deleteAsset")) return;
+  if (event.target.closest(".renameAsset, .deleteAsset, .assetStatus")) return;
   if (asset.type === "folder") await enterFolder(asset.id, asset.name);
   else await selectAsset(asset);
 }
@@ -1432,25 +1765,89 @@ function contextMenuItem(action, label, icon = "") {
   return `<button type="button" role="menuitem" data-action="${action}">${icon}<span>${escapeHtml(label)}</span></button>`;
 }
 
+function contextMenuSeparator() {
+  return `<div class="contextMenuSep" role="separator"></div>`;
+}
+
+async function copyAssetLink(asset) {
+  const url = `${location.origin}/?${asset.type === "folder" ? "folder" : "file"}=${encodeURIComponent(asset.id)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    setAlert(`${asset.type === "folder" ? "Folder" : "Video"} link copied to clipboard.`);
+  } catch {
+    prompt("Copy this link:", url);
+  }
+}
+
+async function moveFolderTo(asset) {
+  if (asset.type !== "folder") return;
+  const destination = await chooseProjectFolder({ mode: "move", asset });
+  if (!destination) return;
+  try {
+    await moveAssetToFolder(asset, destination.folder.id);
+  } catch (error) {
+    setAlert(error.message || "Could not move the folder.", 5000);
+  }
+}
+
+// Swaps the open context menu's content for the file's download options.
+async function showDownloadMenuFor(asset) {
+  elements.assetContextMenu.innerHTML = `<div class="contextMenuNote">Loading downloads&hellip;</div>`;
+  let markup = "";
+  try {
+    const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/downloads`);
+    markup = (data || []).map((item) => {
+      if (item.url) return `<button type="button" role="menuitem" data-download-url="${escapeHtml(item.url)}"><span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.detail || "")}</small></button>`;
+      if (item.prepare) return `<button type="button" role="menuitem" data-prepare="1" data-prepare-type="${escapeHtml(item.exportType || "video")}" data-prepare-quality="${escapeHtml(item.quality || "")}"><span>${escapeHtml(item.label)}</span><small>Prepare</small></button>`;
+      return `<button type="button" role="menuitem" disabled><span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.detail || "")}</small></button>`;
+    }).join("");
+  } catch (error) {
+    markup = `<div class="contextMenuNote">${escapeHtml(error.message || "Could not load downloads.")}</div>`;
+  }
+  if (state.contextAssetId !== asset.id || elements.assetContextMenu.hidden) return;
+  elements.assetContextMenu.innerHTML = markup || `<div class="contextMenuNote">No downloads available.</div>`;
+  const rect = elements.assetContextMenu.getBoundingClientRect();
+  if (rect.bottom > window.innerHeight - 10) {
+    elements.assetContextMenu.style.top = `${Math.max(10, window.innerHeight - rect.height - 10)}px`;
+  }
+}
+
 function showAssetContextMenu(event) {
   const card = event.target.closest(".assetCard");
   const asset = card ? state.assets.find((item) => item.id === card.dataset.id) : null;
   event.preventDefault();
   state.contextAssetId = asset?.id || "";
+  if (asset && !state.selectedAssetIds.has(asset.id)) {
+    setAssetSelection([asset.id], { anchor: asset.id });
+  }
+  const selection = selectedAssets();
+  const selectionCount = selection.length;
   const folder = asset?.type === "folder";
-  const canManageAsset = !asset || canDeleteAsset(asset);
+  const canManageAsset = !asset || (selectionCount > 1 ? selection.every(canDeleteAsset) : canDeleteAsset(asset));
+  const selectedFileCount = selection.filter((item) => item.type === "file").length;
   const items = asset
-    ? [
+    ? selectionCount > 1
+      ? [
+        contextMenuItem("moveSelected", `Move ${selectionCount} selected to folder`),
+        ...(selectedFileCount ? [contextMenuItem("copySelected", `Copy ${selectedFileCount} file${selectedFileCount === 1 ? "" : "s"} to folder`)] : []),
+        ...(selection.some(canDeleteAsset) ? [contextMenuItem("deleteSelected", `Delete ${selectionCount} selected`)] : []),
+      ]
+      : [
         contextMenuItem("open", folder ? "Open folder" : "Open preview"),
         ...(folder ? [contextMenuItem("uploadHere", "Upload into folder")] : []),
+        ...(!folder ? [contextMenuItem("download", "Download")] : []),
+        contextMenuItem("copyLink", folder ? "Copy folder link" : "Copy video link"),
+        contextMenuSeparator(),
         ...(!folder && canManageAsset ? [
-          contextMenuItem("moveFile", "Move to folder"),
+          contextMenuItem("copyFile", "Copy to"),
+          contextMenuItem("moveFile", "Move to"),
           contextMenuItem("moveToArchive", "Move to Archive"),
           contextMenuItem("copyToArchive", "Copy to Archive"),
           contextMenuItem("archiveFootage", "Archive footage"),
         ] : []),
+        ...(folder ? [contextMenuItem("moveFolder", "Move to")] : []),
         contextMenuItem("rename", "Rename"),
-        ...(canManageAsset ? [contextMenuItem("delete", "Delete")] : []),
+        ...(canManageAsset ? [contextMenuSeparator(), contextMenuItem("delete", "Delete")] : []),
       ]
     : [
         contextMenuItem("upload", "Upload files"),
@@ -1467,10 +1864,38 @@ function showAssetContextMenu(event) {
 }
 
 async function handleContextMenuAction(event) {
+  const downloadItem = event.target.closest("button[data-download-url]");
+  if (downloadItem) {
+    hideContextMenu();
+    location.href = downloadItem.dataset.downloadUrl;
+    return;
+  }
+  const prepareItem = event.target.closest("button[data-prepare]");
+  if (prepareItem) {
+    const prepareAsset = state.assets.find((item) => item.id === state.contextAssetId);
+    hideContextMenu();
+    if (!prepareAsset) return;
+    try {
+      await api(`/api/accounts/${state.currentAccountId}/files/${prepareAsset.id}/exports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: prepareItem.dataset.prepareType || "video", quality: prepareItem.dataset.prepareQuality || "" }),
+      });
+      setAlert("Export started. It will appear under Download when ready.");
+    } catch (error) {
+      setAlert(error.message || "Could not start the export.", 4000);
+    }
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const action = button.dataset.action;
   const asset = state.assets.find((item) => item.id === state.contextAssetId);
+  if (action === "download" && asset && asset.type === "file") {
+    // Keep the menu open and swap in the download options.
+    showDownloadMenuFor(asset);
+    return;
+  }
   hideContextMenu();
   if (action === "upload") return openFilePicker({ autoUpload: true });
   if (action === "newFolder") return createFolder();
@@ -1480,9 +1905,15 @@ async function handleContextMenuAction(event) {
   if (action === "uploadHere" && asset.type === "folder") {
     return openFilePicker({ autoUpload: true, targetFolderId: asset.id });
   }
+  if (action === "copyLink") return copyAssetLink(asset);
   if (action === "rename") return renameAsset(asset);
   if (action === "delete") return deleteAsset(asset);
+  if (action === "deleteSelected") return deleteSelectedAssets();
+  if (action === "moveSelected") return moveSelectedAssets();
+  if (action === "copySelected") return copySelectedAssets();
   if (action === "moveFile") return moveFile(asset);
+  if (action === "copyFile") return copyFile(asset);
+  if (action === "moveFolder") return moveFolderTo(asset);
   if (action === "moveToArchive") return moveFile(asset, { archive: true });
   if (action === "copyToArchive") return copyFile(asset, { archive: true });
   if (action === "archiveFootage") return archiveFootage(asset);
@@ -1659,7 +2090,7 @@ async function moveFile(asset, { archive = false } = {}) {
   setAlert(`Moved "${asset.name}" to ${destination.path}.`);
 }
 
-async function moveAssetToFolder(asset, targetFolderId) {
+async function moveAssetToFolder(asset, targetFolderId, { refresh = true, notify = true } = {}) {
   if (!asset || !targetFolderId) return;
   if (asset.type === "folder") {
     if (asset.id === targetFolderId || getFolderDescendantIds(asset.id).has(targetFolderId)) {
@@ -1683,8 +2114,72 @@ async function moveAssetToFolder(asset, targetFolderId) {
   if (state.selectedAsset?.id === asset.id && asset.type !== "folder") {
     state.selectedAsset = { ...state.selectedAsset, parent_id: targetFolderId };
   }
+  if (refresh) await loadFolder();
+  if (notify) setAlert(`Moved "${asset.name}" into the selected folder.`);
+}
+
+async function moveAssetsToFolder(assets, targetFolderId, { destinationLabel = "the selected folder" } = {}) {
+  const movable = assets.filter((asset) => validAssetDropTarget(asset, targetFolderId));
+  if (!movable.length) {
+    setAlert("None of the selected items can be moved there.");
+    return;
+  }
+  let moved = 0;
+  let failedMessage = "";
+  for (const asset of movable) {
+    try {
+      await moveAssetToFolder(asset, targetFolderId, { refresh: false, notify: false });
+      moved += 1;
+    } catch (error) {
+      failedMessage = error.message || `Could not move "${asset.name}".`;
+    }
+  }
+  clearAssetSelection({ render: false });
   await loadFolder();
-  setAlert(`Moved "${asset.name}" into the selected folder.`);
+  const failed = movable.length - moved;
+  setAlert(failed
+    ? `Moved ${moved} of ${movable.length} items. ${failedMessage}`
+    : `Moved ${moved} item${moved === 1 ? "" : "s"} to ${destinationLabel}.`, failed ? 6000 : undefined);
+}
+
+async function moveSelectedAssets() {
+  const assets = selectedAssets();
+  if (!assets.length) return;
+  const label = assets.length === 1 ? `"${assets[0].name}"` : `${assets.length} selected items`;
+  const destination = await chooseProjectFolder({ mode: "move", asset: { name: label } });
+  if (!destination) return;
+  await moveAssetsToFolder(assets, destination.folder.id, { destinationLabel: destination.path });
+}
+
+async function copySelectedAssets() {
+  const files = selectedAssets().filter((asset) => asset.type === "file");
+  if (!files.length) {
+    setAlert("Only files can be copied.");
+    return;
+  }
+  const label = files.length === 1 ? `"${files[0].name}"` : `${files.length} files`;
+  const destination = await chooseProjectFolder({ mode: "copy", asset: { name: label } });
+  if (!destination) return;
+  let copied = 0;
+  let failedMessage = "";
+  for (const file of files) {
+    try {
+      await api(`/api/accounts/${state.currentAccountId}/files/${file.id}/copy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folderId: destination.folder.id }),
+      });
+      copied += 1;
+    } catch (error) {
+      failedMessage = error.message || `Could not copy "${file.name}".`;
+    }
+  }
+  clearAssetSelection({ render: false });
+  await loadFolder();
+  const failed = files.length - copied;
+  setAlert(failed
+    ? `Copied ${copied} of ${files.length} files. ${failedMessage}`
+    : `Copied ${copied} file${copied === 1 ? "" : "s"} to ${destination.path}.`, failed ? 6000 : undefined);
 }
 
 async function copyFile(asset, { archive = false } = {}) {
@@ -1757,6 +2252,42 @@ async function deleteAsset(asset) {
   });
   if (state.selectedAsset?.id === asset.id) closeReview();
   await loadFolder();
+}
+
+async function deleteSelectedAssets() {
+  const assets = selectedAssets();
+  if (!assets.length) return;
+  const deletable = assets.filter(canDeleteAsset);
+  if (!deletable.length) {
+    setAlert("None of the selected items can be deleted.");
+    return;
+  }
+  const skipped = assets.length - deletable.length;
+  const label = deletable.length === 1 ? `"${deletable[0].name}"` : `${deletable.length} selected items`;
+  if (!confirm(`Delete ${label}${skipped ? `? ${skipped} item${skipped === 1 ? "" : "s"} will be skipped.` : "?"}`)) return;
+  const needsPassword = deletable.some((asset) => asset.archive_protected);
+  const archivePassword = needsPassword
+    ? prompt("Some selected items are in a protected project. Enter the project delete password.")
+    : "";
+  if (needsPassword && !archivePassword) return;
+  let deleted = 0;
+  for (const asset of deletable) {
+    const url = asset.type === "folder" ? `/api/accounts/${state.currentAccountId}/folders/${asset.id}` : `/api/accounts/${state.currentAccountId}/files/${asset.id}`;
+    try {
+      await api(url, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivePassword }),
+      });
+      deleted += 1;
+      if (state.selectedAsset?.id === asset.id) closeReview();
+    } catch (error) {
+      setAlert(error.message || `Could not delete "${asset.name}".`);
+    }
+  }
+  clearAssetSelection({ render: false });
+  await loadFolder();
+  setAlert(`Deleted ${deleted} item${deleted === 1 ? "" : "s"}.`);
 }
 
 async function uploadFile(event) {
@@ -2039,21 +2570,45 @@ function setupFileBrowserInteractions() {
   elements.folderList.addEventListener("contextmenu", showAssetContextMenu);
   elements.assetContextMenu.addEventListener("click", handleContextMenuAction);
   document.addEventListener("click", (event) => {
+    // A menu click can re-render the menu, detaching the clicked node before
+    // this handler runs — closest() would then miss and wrongly close it.
+    if (event.target instanceof Element && !event.target.isConnected) return;
     if (!event.target.closest(".fileContextMenu")) hideContextMenu();
+    if (!event.target.closest("#assetStatusMenu") && !event.target.closest(".assetStatus")) closeStatusMenu();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") hideContextMenu();
+    const typing = event.target.closest("input, textarea, select, [contenteditable=\"true\"]");
+    if (typing) return;
+    if (event.key === "Escape") {
+      hideContextMenu();
+      closeStatusMenu();
+      if (state.selectedAssetIds.size) clearAssetSelection();
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a" && !document.body.classList.contains("reviewMode")) {
+      event.preventDefault();
+      setAssetSelection(state.assets.map((asset) => asset.id));
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && state.selectedAssetIds.size && !document.body.classList.contains("reviewMode")) {
+      event.preventDefault();
+      deleteSelectedAssets();
+    }
+    if (event.key === "Enter" && state.selectedAssetIds.size === 1 && !document.body.classList.contains("reviewMode")) {
+      event.preventDefault();
+      const asset = selectedAssets()[0];
+      if (asset) asset.type === "folder" ? enterFolder(asset.id, asset.name) : selectAsset(asset);
+    }
   });
   elements.folderList.addEventListener("dragstart", handleAssetDragStart);
   elements.folderList.addEventListener("dragend", handleAssetDragEnd);
   elements.folderList.addEventListener("dragover", (event) => {
     const appAsset = draggedAppAsset(event);
+    const appAssets = draggedAppAssets(event);
     const folderCard = event.target.closest(".assetCard[data-type=\"folder\"]");
     elements.folderList.querySelectorAll(".isDropTarget").forEach((card) => {
       if (card !== folderCard) card.classList.remove("isDropTarget");
     });
     if (folderCard && event.dataTransfer?.types?.includes("Files")) folderCard.classList.add("isDropTarget");
-    if (folderCard && appAsset && validAssetDropTarget(appAsset, folderCard.dataset.id)) {
+    if (folderCard && appAssets.length && appAssets.every((asset) => validAssetDropTarget(asset, folderCard.dataset.id))) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
       folderCard.classList.add("isDropTarget");
@@ -2064,13 +2619,13 @@ function setupFileBrowserInteractions() {
   });
   elements.folderList.addEventListener("drop", async (event) => {
     const folderCard = event.target.closest(".assetCard[data-type=\"folder\"]");
-    const appAsset = draggedAppAsset(event);
-    if (!folderCard || !appAsset || !validAssetDropTarget(appAsset, folderCard.dataset.id)) return;
+    const appAssets = draggedAppAssets(event);
+    if (!folderCard || !appAssets.length || !appAssets.every((asset) => validAssetDropTarget(asset, folderCard.dataset.id))) return;
     event.preventDefault();
     event.stopPropagation();
     clearAssetDropTargets();
     try {
-      await moveAssetToFolder(appAsset, folderCard.dataset.id);
+      await moveAssetsToFolder(appAssets, folderCard.dataset.id);
     } catch (error) {
       setAlert(error.message, 5000);
     } finally {
@@ -2079,11 +2634,12 @@ function setupFileBrowserInteractions() {
   }, true);
   elements.folderTree.addEventListener("dragover", (event) => {
     const appAsset = draggedAppAsset(event);
+    const appAssets = draggedAppAssets(event);
     const row = event.target.closest(".folderTreeItem[data-folder-id]");
     elements.folderTree.querySelectorAll(".isDropTarget").forEach((item) => {
       if (item !== row) item.classList.remove("isDropTarget");
     });
-    if (!row || !appAsset || !validAssetDropTarget(appAsset, row.dataset.folderId)) return;
+    if (!row || !appAssets.length || !appAssets.every((asset) => validAssetDropTarget(asset, row.dataset.folderId))) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     row.classList.add("isDropTarget");
@@ -2093,12 +2649,12 @@ function setupFileBrowserInteractions() {
   });
   elements.folderTree.addEventListener("drop", async (event) => {
     const row = event.target.closest(".folderTreeItem[data-folder-id]");
-    const appAsset = draggedAppAsset(event);
+    const appAssets = draggedAppAssets(event);
     clearAssetDropTargets();
-    if (!row || !appAsset || !validAssetDropTarget(appAsset, row.dataset.folderId)) return;
+    if (!row || !appAssets.length || !appAssets.every((asset) => validAssetDropTarget(asset, row.dataset.folderId))) return;
     event.preventDefault();
     try {
-      await moveAssetToFolder(appAsset, row.dataset.folderId);
+      await moveAssetsToFolder(appAssets, row.dataset.folderId);
     } catch (error) {
       setAlert(error.message, 5000);
     } finally {
@@ -2131,6 +2687,13 @@ function handleAssetDragEnd() {
 function draggedAppAsset(event) {
   const id = event.dataTransfer?.getData("application/x-amargi-asset-id") || state.draggedAsset?.id || "";
   return state.assets.find((asset) => asset.id === id) || state.draggedAsset;
+}
+
+function draggedAppAssets(event) {
+  const asset = draggedAppAsset(event);
+  if (!asset) return [];
+  if (state.selectedAssetIds.has(asset.id) && state.selectedAssetIds.size > 1) return selectedAssets();
+  return [asset];
 }
 
 function validAssetDropTarget(asset, folderId) {
@@ -2727,14 +3290,10 @@ elements.adminNotifyForm.addEventListener("submit", sendMemberNotification);
 elements.passwordForm.addEventListener("submit", updatePassword);
 elements.accountSelect.addEventListener("change", async () => { state.currentAccountId = elements.accountSelect.value; await loadWorkspaces(); });
 elements.workspaceSelect.addEventListener("change", async () => { state.currentWorkspaceId = elements.workspaceSelect.value; await loadProjects(); });
-elements.projectSelect.addEventListener("change", async () => {
-  state.currentProject = state.projects.find((project) => project.id === elements.projectSelect.value);
-  localStorage.setItem("mediaflow_project", state.currentProject?.id || "");
-  if (state.currentProject) {
-    elements.workspaceTitle.textContent = state.currentProject.name;
-    applyProjectColor(state.currentProject, state.projects);
-    await enterDefaultProjectFolder();
-  }
+elements.projectSelect.addEventListener("change", () => switchProject(elements.projectSelect.value));
+elements.projectTabs.addEventListener("click", (event) => {
+  const tab = event.target.closest(".projectTab[data-project-id]");
+  if (tab) switchProject(tab.dataset.projectId);
 });
 elements.refreshButton.addEventListener("click", loadFolder);
 elements.createFolderButton.addEventListener("click", createFolder);
@@ -2742,6 +3301,11 @@ elements.sidebarCreateFolderButton.addEventListener("click", createFolder);
 elements.backFolderButton.addEventListener("click", async () => { if (state.folderStack.length > 1) state.folderStack.pop(); await loadFolder(); });
 elements.folderBreadcrumbs.addEventListener("click", handleFolderBreadcrumbClick);
 elements.folderTree.addEventListener("click", handleFolderTreeClick);
+elements.folderTree.addEventListener("change", (event) => {
+  if (event.target.id !== "treeMonthSelect" || !state.currentProject) return;
+  localStorage.setItem(`mediaflow_tree_month_${state.currentProject.id}`, event.target.value);
+  renderFolderTree();
+});
 elements.destinationProjectList.addEventListener("click", handleDestinationProjectClick);
 elements.destinationTree.addEventListener("click", handleDestinationTreeClick);
 elements.destinationSearchInput.addEventListener("input", renderDestinationPicker);
@@ -2757,6 +3321,10 @@ document.addEventListener("keydown", (event) => {
 elements.fileInput.addEventListener("change", handleFileInputChange);
 elements.uploadForm.addEventListener("submit", uploadFile);
 elements.folderList.addEventListener("click", handleAssetClick);
+elements.selectAllAssets?.addEventListener("change", () => {
+  if (elements.selectAllAssets.checked) setAssetSelection(state.assets.map((asset) => asset.id));
+  else clearAssetSelection();
+});
 elements.gridViewButton.addEventListener("click", () => { state.view = "grid"; localStorage.setItem("mediaflow_view", state.view); renderAssets(); });
 elements.listViewButton.addEventListener("click", () => { state.view = "list"; localStorage.setItem("mediaflow_view", state.view); renderAssets(); });
 elements.closeReviewButton.addEventListener("click", closeReview);
@@ -2785,6 +3353,7 @@ elements.videoPlayer.addEventListener("pause", () => {
 });
 elements.videoPlayer.addEventListener("timeupdate", updatePlayerUi);
 elements.videoPlayer.addEventListener("loadedmetadata", () => {
+  backfillAssetDuration();
   updatePlayerUi();
   renderCommentMarkers();
   elements.videoFallback.hidden = true;

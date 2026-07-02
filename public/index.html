@@ -53,7 +53,8 @@
             Settings
           </button>
           <button id="localTabButton" class="ghostButton active" type="button">Local Storage</button>
-          <label class="compactControl">
+          <nav id="projectTabs" class="projectTabs" aria-label="Projects"></nav>
+          <label class="compactControl" hidden>
             <span>Project</span>
             <select id="projectSelect" disabled>
               <option value="">Choose workspace</option>
@@ -417,8 +418,13 @@
                   <button id="gridViewButton" class="active" type="button" data-view="grid">Grid</button>
                   <button id="listViewButton" type="button" data-view="list">List</button>
                 </div>
-                <span id="assetCount">0 files</span>
               </div>
+            </div>
+            <div class="assetSelectBar">
+              <label class="selectAllControl" title="Select all">
+                <input id="selectAllAssets" type="checkbox" aria-label="Select all assets">
+              </label>
+              <span id="assetCount">0 files</span>
             </div>
             <div id="folderList" class="assetGrid" aria-live="polite"></div>
             <div id="dropOverlay" class="dropOverlay" aria-hidden="true" hidden>

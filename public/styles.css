@@ -2080,6 +2080,51 @@ body {
   background: #11151d;
 }
 
+.projectTabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 9px;
+  background: #10141c;
+}
+
+.projectTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 13px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #9aa3b4;
+  font-size: 0.8rem;
+  font-weight: 620;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.projectTab:hover {
+  color: #dbe2ee;
+  background: rgb(255 255 255 / 5%);
+}
+
+.projectTab.active {
+  border-color: rgb(255 255 255 / 10%);
+  background: #1c2330;
+  color: #f1f5fb;
+}
+
+.projectTabDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
 .workspace {
   padding: 0;
 }
@@ -2230,6 +2275,51 @@ body {
   overflow: hidden;
 }
 
+.assetCard:focus-visible {
+  outline: 2px solid rgb(122 144 255 / 72%);
+  outline-offset: 2px;
+}
+
+.assetSelectMark {
+  position: absolute;
+  top: 11px;
+  left: 11px;
+  z-index: 8;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 5px;
+  background: rgb(7 10 16 / 72%);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 28%);
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.assetCard:hover .assetSelectMark,
+.assetCard:focus-within .assetSelectMark,
+.assetCard.selected .assetSelectMark,
+.assetCard[aria-selected="true"] .assetSelectMark {
+  opacity: 1;
+}
+
+.assetCard.selected .assetSelectMark,
+.assetCard[aria-selected="true"] .assetSelectMark {
+  border-color: #7c8cff;
+  background: #675cff;
+}
+
+.assetCard.selected .assetSelectMark::after,
+.assetCard[aria-selected="true"] .assetSelectMark::after {
+  content: "";
+  width: 8px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
 .assetCard::before {
   content: "";
   position: absolute;
@@ -2246,6 +2336,13 @@ body {
 .assetCard:hover {
   border-color: #353d4f;
   background: #181e29;
+}
+
+.assetCard.selected,
+.assetCard[aria-selected="true"] {
+  border-color: #7c8cff;
+  background: #182036;
+  box-shadow: inset 0 0 0 1px rgb(124 140 255 / 54%), 0 14px 34px rgb(0 0 0 / 22%);
 }
 
 .assetCard-folder {
@@ -2419,6 +2516,314 @@ body {
   margin-top: 4px;
   color: #8d96a6;
   font-size: 0.74rem;
+}
+
+.assetInfo .assetRetention {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.assetRetention svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.assetRetention.retentionDate {
+  color: #e9c04a;
+}
+
+.assetRetention.retentionPermanent {
+  color: #77808f;
+}
+
+/* ── Thumb overlay bar: retention countdown + duration (grid view) ── */
+.assetCard .assetThumb {
+  position: relative;
+}
+
+.assetThumbBar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 9px 6px;
+  background: linear-gradient(transparent, rgb(5 7 11 / 78%));
+  border-radius: 0 0 8px 8px;
+  pointer-events: none;
+}
+
+.thumbRetention {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #e9c04a;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.thumbRetention.permanent {
+  color: #9aa3b4;
+}
+
+.thumbRetention svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.thumbDuration {
+  color: #e8edf6;
+  font-size: 0.68rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Status pill ── */
+.assetStatus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 4%);
+  color: #9aa3b4;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.assetStatus:hover {
+  filter: brightness(1.25);
+}
+
+.assetStatus.placeholder {
+  visibility: hidden;
+  cursor: default;
+}
+
+.assetStatus[data-status="work_in_progress"] {
+  border-color: rgb(91 141 238 / 40%);
+  background: rgb(91 141 238 / 12%);
+  color: #7ea4f2;
+}
+
+.assetStatus[data-status="approved"] {
+  border-color: rgb(78 201 148 / 40%);
+  background: rgb(78 201 148 / 12%);
+  color: #4ec994;
+}
+
+.assetStatus[data-status="rejected"] {
+  border-color: rgb(232 91 122 / 40%);
+  background: rgb(232 91 122 / 12%);
+  color: #e87a92;
+}
+
+.assetStatus[data-status="published"] {
+  border-color: rgb(200 126 232 / 40%);
+  background: rgb(200 126 232 / 12%);
+  color: #c99ae0;
+}
+
+.statusMenu {
+  position: fixed;
+  z-index: 60;
+}
+
+.statusMenu .statusDot {
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #9aa3b4;
+}
+
+.statusMenu .statusDot[data-status="work_in_progress"] { background: #5b8dee; }
+.statusMenu .statusDot[data-status="approved"] { background: #4ec994; }
+.statusMenu .statusDot[data-status="rejected"] { background: #e85b7a; }
+.statusMenu .statusDot[data-status="published"] { background: #c87ee8; }
+
+.statusMenu em {
+  margin-left: auto;
+  color: #7ea4f2;
+  font-style: normal;
+}
+
+/* ── Uploader chip + comment count ── */
+.uploaderChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #9aa3b4;
+  font-size: 0.7rem;
+}
+
+.uploaderChip i {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  color: #0c0f15;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.uploaderChip em {
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetComments {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #77808f;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assetComments svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* ── Asset details row (grid view) ── */
+.assetDetails {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 2px 2px;
+}
+
+.assetDetails .assetDate {
+  display: none;
+}
+
+.assetDetails .uploaderChip {
+  flex: 1 1 auto;
+}
+
+.assetDetails-folder {
+  display: none;
+}
+
+.assetGrid:not(.listView) .assetInfo .assetRetention {
+  display: none;
+}
+
+/* ── List view: real columns ── */
+.assetListHeader {
+  display: none;
+}
+
+.assetGrid.listView .assetListHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 46px 8px 84px;
+  color: #77808f;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.assetGrid.listView .assetListHeader .assetListHeaderName {
+  flex: 1 1 auto;
+  min-width: 90px;
+}
+
+.assetGrid.listView .assetListHeader span:not(.assetListHeaderName) {
+  flex: none;
+}
+
+.assetGrid.listView .assetListHeader span:nth-child(2) { width: 96px; }
+.assetGrid.listView .assetListHeader span:nth-child(3) { width: 148px; }
+.assetGrid.listView .assetListHeader span:nth-child(4) { width: 190px; }
+.assetGrid.listView .assetListHeader .assetListHeaderComments { width: 40px; text-align: right; }
+
+.assetGrid.listView .assetCard {
+  display: flex;
+  align-items: center;
+}
+
+.assetGrid.listView .assetOpen {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.assetGrid.listView .assetThumbBar {
+  display: none;
+}
+
+.assetGrid.listView .assetDetails,
+.assetGrid.listView .assetDetails-folder {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  padding: 0 46px 0 0;
+}
+
+.assetGrid.listView .assetDetails .assetStatus,
+.assetGrid.listView .assetDetails-folder .assetStatus {
+  width: 96px;
+  justify-content: center;
+}
+
+.assetGrid.listView .assetDetails .assetDate {
+  display: inline;
+  width: 148px;
+  flex: none;
+  color: #8d96a6;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assetGrid.listView .assetDetails .uploaderChip {
+  width: 190px;
+  flex: none;
+}
+
+.assetGrid.listView .assetDetails .assetComments {
+  width: 40px;
+  flex: none;
+  justify-content: flex-end;
 }
 
 .assetCardActions {
@@ -4096,16 +4501,34 @@ body:not(.reviewMode) .assetGrid.listView .assetCard-folder .assetThumb {
 }
 
 body:not(.reviewMode) .assetGrid.listView .assetInfo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  display: flex;
   align-items: center;
   gap: 18px;
   padding: 0;
 }
 
+body:not(.reviewMode) .assetGrid.listView .assetInfo strong {
+  flex: 1 1 auto;
+  min-width: 90px;
+  order: 1;
+}
+
 body:not(.reviewMode) .assetGrid.listView .assetInfo span {
+  flex: 0 1 auto;
+  order: 3;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body:not(.reviewMode) .assetGrid.listView .assetInfo .assetRetention {
+  flex: 0 0 auto;
+  order: 2;
+  overflow: visible;
+  text-align: left;
 }
 
 body.reviewMode .folderSidebar {
@@ -8779,4 +9202,244 @@ body.reviewMode .volumeSlider {
 body.reviewMode .commentFilter.active {
   background: var(--project-bg) !important;
   color: var(--project-accent) !important;
+}
+
+/* ── Frame.io-style list columns: final layout overrides ── */
+body:not(.reviewMode) .assetGrid.listView .assetCard,
+.assetGrid.listView .assetCard {
+  display: flex;
+  align-items: center;
+}
+
+body:not(.reviewMode) .assetGrid.listView .assetOpen,
+.assetGrid.listView .assetOpen {
+  flex: 1 1 auto;
+  min-width: 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+body:not(.reviewMode) .assetGrid.listView .assetKindPill,
+.assetGrid.listView .assetKindPill {
+  display: none;
+}
+
+/* Name column keeps only the name + retention chip; type/size move out of the way */
+body:not(.reviewMode) .assetGrid.listView .assetInfo > span:not(.assetRetention),
+.assetGrid.listView .assetInfo > span:not(.assetRetention) {
+  display: none;
+}
+
+body:not(.reviewMode) .assetGrid.listView .assetInfo .assetRetention,
+.assetGrid.listView .assetInfo .assetRetention {
+  display: inline-flex;
+}
+
+/* ── Folder tree month picker ── */
+.folderTreeMonthBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 4px 10px;
+  padding: 7px 10px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 9px;
+  background: #10141c;
+}
+
+.folderTreeMonthLabel {
+  color: #77808f;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#treeMonthSelect {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 7px;
+  background: #171c26;
+  color: #e8edf6;
+  font-size: 0.78rem;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+#treeMonthSelect:hover {
+  border-color: rgb(255 255 255 / 18%);
+}
+
+/* ── Select-all bar ── */
+.assetSelectBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px 2px;
+  color: #9aa3b4;
+  font-size: 0.78rem;
+  font-weight: 620;
+}
+
+.selectAllControl {
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+#selectAllAssets,
+.selectAllControl input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #675cff;
+  cursor: pointer;
+}
+
+#selectAllAssets:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ── Card checkbox: clickable toggle ── */
+.assetSelectMark {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.assetSelectMark::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+
+/* List view: checkbox becomes a leading column, vertically centered */
+body:not(.reviewMode) .assetGrid.listView .assetSelectMark,
+.assetGrid.listView .assetSelectMark {
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+}
+
+body:not(.reviewMode) .assetGrid.listView .assetOpen,
+.assetGrid.listView .assetOpen {
+  padding-left: 40px;
+}
+
+/* Keep row actions clear of the comments column */
+body:not(.reviewMode) .assetGrid.listView .assetDetails,
+body:not(.reviewMode) .assetGrid.listView .assetDetails-folder,
+.assetGrid.listView .assetDetails,
+.assetGrid.listView .assetDetails-folder {
+  padding-right: 84px;
+}
+
+/* Align the list header with the row columns (checkbox + thumb offset) */
+.assetGrid.listView .assetListHeader {
+  padding: 4px 93px 8px 117px;
+}
+
+/* Project tabs stay on one line and scroll instead of overflowing the header */
+.projectTabs {
+  max-width: min(46vw, 520px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.projectTabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Responsive list columns: shrink, then drop, never overlap ── */
+body:not(.reviewMode) .assetGrid.listView .assetOpen,
+.assetGrid.listView .assetOpen {
+  min-width: 150px;
+}
+
+.assetGrid.listView .assetDetails .uploaderChip {
+  flex: 0 1 190px;
+  min-width: 70px;
+}
+
+.assetGrid.listView .assetDetails .assetDate {
+  flex: 0 1 148px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1240px) {
+  .assetGrid.listView .assetDetails .uploaderChip,
+  .assetGrid.listView .assetDetails-folder .uploaderChip,
+  .assetGrid.listView .assetListHeader span:nth-child(4) {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .assetGrid.listView .assetDetails .assetDate,
+  .assetGrid.listView .assetDetails-folder .assetDate,
+  .assetGrid.listView .assetListHeader span:nth-child(3) {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .assetGrid.listView .assetDetails .assetComments,
+  .assetGrid.listView .assetListHeader .assetListHeaderComments {
+    display: none;
+  }
+}
+
+.assetListHeaderComments svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vertical-align: -2px;
+}
+
+/* ── Context menu: separators, download submenu, danger action ── */
+.fileContextMenu .contextMenuSep {
+  height: 1px;
+  margin: 5px 8px;
+  background: rgb(255 255 255 / 8%);
+}
+
+.fileContextMenu .contextMenuNote {
+  padding: 10px 12px;
+  color: #8d96a6;
+  font-size: 0.74rem;
+}
+
+.fileContextMenu button small {
+  margin-left: auto;
+  color: #77808f;
+  font-size: 0.64rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.fileContextMenu button:disabled {
+  color: #5d6675;
+  cursor: default;
+}
+
+.fileContextMenu button:disabled:hover {
+  background: transparent;
+}
+
+.fileContextMenu button[data-action="delete"],
+.fileContextMenu button[data-action="deleteSelected"] {
+  color: #e87a92;
+}
+
+.fileContextMenu button[data-action="delete"]:hover,
+.fileContextMenu button[data-action="deleteSelected"]:hover {
+  background: rgb(232 91 122 / 14%);
+  color: #ff9fb3;
 }

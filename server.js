@@ -847,10 +847,12 @@ function normalizeRetentionDays(value) {
   return [30, 60, 90].includes(days) ? days : null;
 }
 
+// Lower qualities compress harder (higher CRF + 96k audio) so 720/480 come out
+// meaningfully smaller than the 1080 preview, like Frame.io proxy ladders.
 const VIDEO_RENDITIONS = [
   { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23", preset: "veryfast" },
-  { quality: "720", label: "720p", maxWidth: 1280, crf: "25", preset: "veryfast" },
-  { quality: "480", label: "480p", maxWidth: 854, crf: "28", preset: "ultrafast" },
+  { quality: "720", label: "720p", maxWidth: 1280, crf: "28", preset: "veryfast", audioBitrate: "96k" },
+  { quality: "480", label: "480p", maxWidth: 854, crf: "31", preset: "veryfast", audioBitrate: "96k" },
 ];
 const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "1080,480").split(",").map((item) => item.trim()).filter(Boolean));
 
@@ -858,6 +860,18 @@ const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITION
 // Avoids infinite retry loops while still triggering generation when needed.
 const exportQueuedIds = new Set();
 let exportQueueRunning = false;
+
+// Per-file promise chain so two exports on the same file never run concurrently.
+// Concurrent generateVideoProxy runs each hold their own DB snapshot and the
+// later write silently drops the earlier run's rendition metadata.
+const exportJobChains = new Map();
+
+function runExportJob(fileId, options) {
+  const previous = exportJobChains.get(fileId) || Promise.resolve();
+  const job = previous.then(() => generateVideoProxy(fileId, options));
+  exportJobChains.set(fileId, job.catch(() => {}));
+  return job;
+}
 
 function queueExport(fileId) {
   if (!getFfmpegPath() || exportQueuedIds.has(fileId)) return;
@@ -869,7 +883,7 @@ async function runExportQueue() {
   exportQueueRunning = true;
   for (const fileId of [...exportQueuedIds]) {
     try {
-      await generateVideoProxy(fileId, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
+      await runExportJob(fileId, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
     } catch (err) {
       console.error(`[Queue] Export failed for ${fileId}:`, err.message);
     }
@@ -910,21 +924,25 @@ function getFfmpegPath() {
   return process.env.FFMPEG_PATH || ffmpegInstaller?.path || "";
 }
 
-// Returns video width in pixels using ffprobe, or 0 on failure
-async function probeVideoWidth(filePath) {
+// Returns { longSide, duration } using ffprobe, zeros on failure.
+// Renditions cap the long side so portrait video (reels) downscales correctly.
+async function probeVideoMeta(filePath) {
   const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath) return 0;
+  if (!ffmpegPath) return { longSide: 0, duration: 0 };
   const ffprobePath = process.env.FFPROBE_PATH || ffmpegPath.replace(/ffmpeg(\.exe)?$/i, (m, ext) => `ffprobe${ext || ""}`);
   try {
     const { execFile } = require("child_process");
     const output = await new Promise((resolve, reject) => {
-      execFile(ffprobePath, ["-v", "quiet", "-select_streams", "v:0", "-show_entries", "stream=width", "-of", "csv=p=0", filePath], { timeout: 15000 }, (err, stdout) => {
+      execFile(ffprobePath, ["-v", "quiet", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "default=noprint_wrappers=1", filePath], { timeout: 15000 }, (err, stdout) => {
         if (err) reject(err); else resolve(stdout.trim());
       });
     });
-    return parseInt(output, 10) || 0;
+    const values = Object.fromEntries(output.split(/\r?\n/).map((line) => line.split("=")));
+    const width = parseInt(values.width, 10) || 0;
+    const height = parseInt(values.height, 10) || 0;
+    return { longSide: Math.max(width, height), duration: Number(values.duration) || 0 };
   } catch {
-    return 0;
+    return { longSide: 0, duration: 0 };
   }
 }
 
@@ -1053,6 +1071,7 @@ function toApiFile(file, db = null) {
     archive_protected: db ? isFolderInArchive(db, file.folderId) : false,
     retention_days: retentionDays,
     retention_expires_at: retentionExpiresAt,
+    comment_count: (db?.comments?.[file.id] || []).length,
     thumbnail: file.thumbnailKey ? `/api/accounts/${INTERNAL_ACCOUNT_ID}/files/${file.id}/thumbnail` : "",
   };
 }
@@ -1209,12 +1228,15 @@ async function generateVideoProxy(fileId, options = {}) {
     });
     console.log(`[export] Source downloaded, starting transcoding …`);
 
-    // Skip renditions where source is same size or smaller than the target (no benefit)
-    // e.g. 1080p source → skip 1080p rendition, keep 480p
-    const sourceWidth = await probeVideoWidth(localInput);
+    // Skip only true upscales (target above the source's longer dimension).
+    // A 1080p source still gets a compressed 1080p rendition, matching Frame.io,
+    // and portrait reels (1080x1920) are measured by their long side.
+    const { longSide: sourceLongSide, duration: sourceDuration } = await probeVideoMeta(localInput);
+    if (sourceLongSide > 0) file.sourceLongSide = sourceLongSide;
+    if (sourceDuration > 0 && !file.duration) file.duration = Math.round(sourceDuration);
     const effectiveQualities = qualities.filter((r) => {
-      if (sourceWidth > 0 && r.maxWidth >= sourceWidth) {
-        console.log(`[export] Skipping ${r.label} — source width ${sourceWidth}px does not exceed ${r.maxWidth}px`);
+      if (sourceLongSide > 0 && r.maxWidth > sourceLongSide) {
+        console.log(`[export] Skipping ${r.label} — source long side ${sourceLongSide}px is below ${r.maxWidth}px`);
         file.exportJobs[r.quality] = "skipped";
         return false;
       }
@@ -1232,35 +1254,50 @@ async function generateVideoProxy(fileId, options = {}) {
       } catch {}
     }
     file.renditions ||= {};
+    const force = Boolean(options.force);
     for (const rendition of effectiveQualities) {
-      if (file.renditions?.[rendition.quality]?.key && await objectExists(file.renditions[rendition.quality].key)) {
+      if (!force && file.renditions?.[rendition.quality]?.key && await objectExists(file.renditions[rendition.quality].key)) {
         file.exportJobs[rendition.quality] = "ready";
         continue;
       }
       const outputPath = path.join(tempDir, `${rendition.quality}.mp4`);
-      const scale = `scale='min(${rendition.maxWidth},iw)':-2`;
+      // Cap the longer dimension (keeps portrait reels downscaling correctly) and keep dimensions even for libx264.
+      const scale = `scale=w='if(gt(iw,ih),trunc(min(${rendition.maxWidth},iw)/2)*2,-2)':h='if(gt(iw,ih),-2,trunc(min(${rendition.maxWidth},ih)/2)*2)'`;
       const preset = rendition.preset || "veryfast";
-      await runFfmpeg([
-        "-y", "-threads", "0",
-        "-i", localInput,
-        "-vf", scale,
-        "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
-        "-c:a", "copy",          // copy audio stream — no re-encode, instant
-        "-movflags", "+faststart",
-        outputPath,
-      ], `${rendition.label} MP4 export`)
-        .catch(() =>
-          // fallback: re-encode audio if copy fails (incompatible source codec)
-          runFfmpeg([
-            "-y", "-threads", "0",
-            "-i", localInput,
-            "-vf", scale,
-            "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
-            "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart",
-            outputPath,
-          ], `${rendition.label} MP4 export (re-encode audio)`)
-        );
+      if (rendition.audioBitrate) {
+        // Lower renditions always re-encode audio at a small bitrate.
+        await runFfmpeg([
+          "-y", "-threads", "0",
+          "-i", localInput,
+          "-vf", scale,
+          "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
+          "-c:a", "aac", "-b:a", rendition.audioBitrate, "-ac", "2",
+          "-movflags", "+faststart",
+          outputPath,
+        ], `${rendition.label} MP4 export`);
+      } else {
+        await runFfmpeg([
+          "-y", "-threads", "0",
+          "-i", localInput,
+          "-vf", scale,
+          "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
+          "-c:a", "copy",          // copy audio stream — no re-encode, instant
+          "-movflags", "+faststart",
+          outputPath,
+        ], `${rendition.label} MP4 export`)
+          .catch(() =>
+            // fallback: re-encode audio if copy fails (incompatible source codec)
+            runFfmpeg([
+              "-y", "-threads", "0",
+              "-i", localInput,
+              "-vf", scale,
+              "-c:v", "libx264", "-preset", preset, "-crf", rendition.crf,
+              "-c:a", "aac", "-b:a", "128k",
+              "-movflags", "+faststart",
+              outputPath,
+            ], `${rendition.label} MP4 export (re-encode audio)`)
+          );
+      }
       const renditionKey = storageKey("projects", file.projectId, "files", file.id, `proxy-${rendition.quality}.mp4`);
       await uploadFileToR2(renditionKey, outputPath, "video/mp4");
       file.renditions[rendition.quality] = { key: renditionKey, label: rendition.label, maxWidth: rendition.maxWidth, contentType: "video/mp4" };
@@ -2285,7 +2322,7 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
-    if (isVideo(file) && getFfmpegPath()) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file) && getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2322,7 +2359,7 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
-    if (isVideo(file) && getFfmpegPath()) generateVideoProxy(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file) && getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2466,7 +2503,10 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
       // ── Show video renditions not yet ready ──
       for (const rendition of VIDEO_RENDITIONS.filter((item) => !renditionEntries.some((entry) => entry.quality === item.quality))) {
         const status = jobs[rendition.quality] || "";
-        if (status === "skipped") continue;
+        // Hide only confirmed upscales. Stale "skipped" marks (from the old
+        // width-based rule, or with no recorded source size) stay preparable.
+        const sourceLongSide = Number(file.sourceLongSide) || Number(file.sourceWidth) || 0;
+        if (status === "skipped" && sourceLongSide > 0 && rendition.maxWidth > sourceLongSide) continue;
         const isGenerating = status === "processing" && !jobIsStale;
         downloads.push({
           key: `pending-${rendition.quality}`,
@@ -2539,7 +2579,7 @@ app.post("/api/accounts/:accountId/files/:fileId/exports", async (request, respo
     const type = String(request.body?.type || "");
     const quality = String(request.body?.quality || "");
     if (type === "audio") {
-      generateVideoProxy(file.id, { qualities: [], includeAudio: true, includeThumbnail: false }).catch(() => {});
+      runExportJob(file.id, { qualities: [], includeAudio: true, includeThumbnail: false }).catch(() => {});
       response.status(202).json({ ok: true, message: "MP3 export started." });
       return;
     }
@@ -2548,7 +2588,7 @@ app.post("/api/accounts/:accountId/files/:fileId/exports", async (request, respo
       response.status(400).json({ error: "Choose a valid video quality." });
       return;
     }
-    generateVideoProxy(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false }).catch(() => {});
+    runExportJob(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false, force: Boolean(request.body?.force) }).catch(() => {});
     response.status(202).json({ ok: true, message: `${rendition.label} export started.` });
   } catch (error) {
     next(error);
@@ -2576,6 +2616,10 @@ app.patch("/api/accounts/:accountId/files/:fileId", async (request, response, ne
         return;
       }
       file.tags = normalizeTags(request.body.tags);
+    }
+    if (Object.hasOwn(request.body || {}, "duration")) {
+      const duration = Math.round(Number(request.body.duration));
+      if (Number.isFinite(duration) && duration > 0 && !file.duration) file.duration = duration;
     }
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
@@ -3159,7 +3203,7 @@ async function requeuePendingProxies() {
     (async () => {
       for (const f of toProcess) {
         try {
-          await generateVideoProxy(f.id, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
+          await runExportJob(f.id, { qualities: ["1080", "480"], includeAudio: true, includeThumbnail: true });
         } catch (err) {
           console.error(`[Startup] Export failed for ${f.name}:`, err.message);
         }
