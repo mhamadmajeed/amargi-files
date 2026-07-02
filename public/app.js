@@ -1343,10 +1343,17 @@ function assetThumbBarMarkup(asset) {
   return `<div class="assetThumbBar">${retention}${duration}</div>`;
 }
 
+function userDisplayName(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  const user = (state.users || []).find((item) => String(item.email || "").trim().toLowerCase() === normalized);
+  return user?.name || String(email || "").split("@")[0] || "";
+}
+
 function uploaderChipMarkup(email) {
   if (!email) return `<span class="uploaderChip empty"></span>`;
+  const name = userDisplayName(email);
   const hue = [...String(email)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-  return `<span class="uploaderChip" title="${escapeHtml(email)}"><i style="background:hsl(${hue} 60% 52%)">${escapeHtml(email[0].toUpperCase())}</i><em>${escapeHtml(email)}</em></span>`;
+  return `<span class="uploaderChip" title="${escapeHtml(email)}"><i style="background:hsl(${hue} 60% 52%)">${escapeHtml((name[0] || "?").toUpperCase())}</i><em>${escapeHtml(name)}</em></span>`;
 }
 
 function assetStatusMarkup(asset) {
@@ -1790,6 +1797,29 @@ async function moveFolderTo(asset) {
   }
 }
 
+// Copies the file into its own folder as "<name> copy.<ext>", like Frame.io Duplicate.
+async function duplicateFile(asset) {
+  if (asset.type !== "file") return;
+  try {
+    const { data } = await api(`/api/accounts/${state.currentAccountId}/files/${asset.id}/copy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: asset.parent_id }),
+    });
+    const extension = (asset.name.match(/\.[^.]+$/) || [""])[0];
+    const base = extension ? asset.name.slice(0, -extension.length) : asset.name;
+    await api(`/api/accounts/${state.currentAccountId}/files/${data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `${base} copy${extension}` }),
+    }).catch(() => {});
+    await loadFolder();
+    setAlert(`Duplicated "${asset.name}".`);
+  } catch (error) {
+    setAlert(error.message || "Could not duplicate the file.", 5000);
+  }
+}
+
 // Swaps the open context menu's content for the file's download options.
 async function showDownloadMenuFor(asset) {
   elements.assetContextMenu.innerHTML = `<div class="contextMenuNote">Loading downloads&hellip;</div>`;
@@ -1841,6 +1871,7 @@ function showAssetContextMenu(event) {
         ...(!folder && canManageAsset ? [
           contextMenuItem("copyFile", "Copy to"),
           contextMenuItem("moveFile", "Move to"),
+          contextMenuItem("duplicate", "Duplicate"),
           contextMenuItem("moveToArchive", "Move to Archive"),
           contextMenuItem("copyToArchive", "Copy to Archive"),
           contextMenuItem("archiveFootage", "Archive footage"),
@@ -1914,6 +1945,7 @@ async function handleContextMenuAction(event) {
   if (action === "moveFile") return moveFile(asset);
   if (action === "copyFile") return copyFile(asset);
   if (action === "moveFolder") return moveFolderTo(asset);
+  if (action === "duplicate") return duplicateFile(asset);
   if (action === "moveToArchive") return moveFile(asset, { archive: true });
   if (action === "copyToArchive") return copyFile(asset, { archive: true });
   if (action === "archiveFootage") return archiveFootage(asset);

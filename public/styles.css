@@ -9446,3 +9446,17 @@ body:not(.reviewMode) .assetGrid.listView .assetOpen,
   background: rgb(232 91 122 / 14%);
   color: #ff9fb3;
 }
+
+/* ── Comment composer: room for 3-4 lines ── */
+body.reviewMode .commentInputRow {
+  align-items: flex-end !important;
+}
+
+body.reviewMode .commentInputRow .commentTimecodeStamp {
+  align-self: flex-start !important;
+}
+
+body.reviewMode #commentInput {
+  min-height: 76px !important;
+  max-height: 150px !important;
+}
