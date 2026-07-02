@@ -578,7 +578,7 @@ progress {
 
 .assetPane {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .reviewPane {
@@ -2727,7 +2727,7 @@ body {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 8px 2px 2px;
+  padding: 2px 10px 10px;
 }
 
 .assetDetails .assetDate {
@@ -9276,7 +9276,10 @@ body:not(.reviewMode) .assetGrid.listView .assetInfo .assetRetention,
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 24px 2px;
+  min-height: 40px;
+  padding: 4px 24px;
+  border-bottom: 1px solid #131924;
+  background: #0c1017;
   color: #9aa3b4;
   font-size: 0.78rem;
   font-weight: 620;
