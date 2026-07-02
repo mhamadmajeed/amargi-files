@@ -38,17 +38,26 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/health") return new Response("ok");
+    const auth = request.headers.get("authorization") || "";
+    const authorized = env.TRIGGER_SECRET && auth === `Bearer ${env.TRIGGER_SECRET}`;
+    if (url.pathname === "/debug" && request.method === "GET") {
+      if (!authorized) return new Response("Unauthorized", { status: 401 });
+      const container = getContainer(env.TRANSCODER);
+      try {
+        await container.start({ envVars: r2EnvVars(env) });
+      } catch {}
+      const res = await container.containerFetch(new Request("http://transcoder/health"));
+      return new Response(await res.text(), { headers: { "content-type": "application/json" } });
+    }
     if (url.pathname !== "/trigger" || request.method !== "POST") {
       return new Response("Not found", { status: 404 });
     }
-    const auth = request.headers.get("authorization") || "";
-    if (!env.TRIGGER_SECRET || auth !== `Bearer ${env.TRIGGER_SECRET}`) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+    if (!authorized) return new Response("Unauthorized", { status: 401 });
     let body = {};
     try { body = await request.json(); } catch {}
-    await wakeContainer(env, body);
-    return new Response(JSON.stringify({ ok: true }), {
+    const containerResponse = await wakeContainer(env, body);
+    const detail = await containerResponse.text().catch(() => "");
+    return new Response(JSON.stringify({ ok: true, container: detail.slice(0, 400) }), {
       status: 202,
       headers: { "content-type": "application/json" },
     });

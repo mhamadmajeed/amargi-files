@@ -10,6 +10,7 @@
 //     the Worker's cron and app triggers boot it again when needed.
 process.env.DATA_DIR = process.env.DATA_DIR || "/tmp/amargi-data";
 
+const fs = require("fs");
 const http = require("http");
 const app = require("../server.js");
 
@@ -17,6 +18,20 @@ const IDLE_EXIT_MS = 30 * 1000;
 let activeWork = Promise.resolve();
 let pendingRuns = 0;
 let idleTimer = null;
+let lastError = "";
+let completedRuns = 0;
+
+function diagnostics() {
+  return {
+    envPresent: ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_ENDPOINT"].filter((k) => process.env[k]),
+    ffmpegPath: process.env.FFMPEG_PATH || "",
+    ffmpegExists: fs.existsSync(process.env.FFMPEG_PATH || "/usr/bin/ffmpeg"),
+    pendingRuns,
+    completedRuns,
+    lastError,
+    uptimeSec: Math.round(process.uptime()),
+  };
+}
 
 function scheduleIdleExit() {
   clearTimeout(idleTimer);
@@ -35,9 +50,13 @@ function enqueue(label, work) {
       console.log(`[container] start: ${label}`);
       return work();
     })
-    .catch((error) => console.error(`[container] ${label} failed:`, error.message))
+    .catch((error) => {
+      lastError = `${label}: ${error.message}`;
+      console.error(`[container] ${label} failed:`, error.stack || error.message);
+    })
     .finally(() => {
       pendingRuns -= 1;
+      completedRuns += 1;
       console.log(`[container] done: ${label}`);
       scheduleIdleExit();
     });
@@ -56,7 +75,8 @@ function readBody(request) {
 
 http.createServer(async (request, response) => {
   if (request.url.startsWith("/health")) {
-    response.end("ok");
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(diagnostics()));
     return;
   }
   const job = request.method === "POST" ? await readBody(request) : {};
