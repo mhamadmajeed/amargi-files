@@ -1,0 +1,30 @@
+{
+  "name": "amargi-transcoder",
+  "main": "transcoder/index.mjs",
+  "compatibility_date": "2026-06-01",
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
+  "containers": [
+    {
+      "class_name": "Transcoder",
+      "image": "./Dockerfile",
+      "max_instances": 1,
+      "instance_type": "standard"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "Transcoder",
+        "name": "TRANSCODER"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "new_sqlite_classes": ["Transcoder"],
+      "tag": "v1"
+    }
+  ]
+}

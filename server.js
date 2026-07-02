@@ -947,6 +947,30 @@ function getFfmpegPath() {
   return ffmpegInstaller?.path || "";
 }
 
+function transcoderConfigured() {
+  return Boolean(process.env.TRANSCODER_TRIGGER_URL);
+}
+
+// True when SOMETHING can generate exports: local ffmpeg or the remote worker.
+function canPrepareExports() {
+  return Boolean(getFfmpegPath()) || transcoderConfigured();
+}
+
+// Wakes the Cloudflare transcoder container. Fire-and-forget: the container
+// reads pending work from the shared metadata DB, so a lost ping is retried
+// by its cron. Payload optionally names a specific export job.
+function pingTranscoder(job = null) {
+  if (!transcoderConfigured() || getFfmpegPath()) return;
+  fetch(process.env.TRANSCODER_TRIGGER_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.TRANSCODER_TRIGGER_SECRET || ""}`,
+    },
+    body: JSON.stringify(job || {}),
+  }).catch((error) => console.warn("[transcoder] trigger failed:", error.message));
+}
+
 // Returns { longSide, duration } using ffprobe, zeros on failure.
 // Renditions cap the long side so portrait video (reels) downscales correctly.
 async function probeVideoMeta(filePath) {
@@ -2350,7 +2374,10 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
-    if (isVideo(file) && getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file)) {
+      if (getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+      else pingTranscoder();
+    }
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2387,7 +2414,10 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     file.updatedAt = new Date().toISOString();
     await writeMediaDb(db);
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
-    if (isVideo(file) && getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+    if (isVideo(file)) {
+      if (getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
+      else pingTranscoder();
+    }
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
     next(error);
@@ -2521,7 +2551,7 @@ app.get("/api/accounts/:accountId/files/:fileId/downloads", async (request, resp
       const jobs = file.exportJobs || {};
       const expectedAudioKey = file.audioKey || storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
       const hasAudio = await objectExists(expectedAudioKey);
-      const ffmpegAvailableForExport = Boolean(getFfmpegPath());
+      const ffmpegAvailableForExport = canPrepareExports();
 
       // A job is stale if it has been "processing" for more than 10 minutes
       // (server restart or crash killed the FFmpeg process — never self-resolves).
@@ -2596,8 +2626,8 @@ app.post("/api/accounts/:accountId/files/:fileId/exports", async (request, respo
       response.status(400).json({ error: "Only videos can be exported." });
       return;
     }
-    if (!getFfmpegPath()) {
-      response.status(400).json({ error: "FFmpeg is not configured on this machine." });
+    if (!canPrepareExports()) {
+      response.status(400).json({ error: "No transcoder is available to generate exports." });
       return;
     }
     if (!(await objectExists(file.r2Key))) {
@@ -2607,7 +2637,8 @@ app.post("/api/accounts/:accountId/files/:fileId/exports", async (request, respo
     const type = String(request.body?.type || "");
     const quality = String(request.body?.quality || "");
     if (type === "audio") {
-      runExportJob(file.id, { qualities: [], includeAudio: true, includeThumbnail: false }).catch(() => {});
+      if (getFfmpegPath()) runExportJob(file.id, { qualities: [], includeAudio: true, includeThumbnail: false }).catch(() => {});
+      else pingTranscoder({ fileId: file.id, includeAudio: true, qualities: [] });
       response.status(202).json({ ok: true, message: "MP3 export started." });
       return;
     }
@@ -2616,7 +2647,8 @@ app.post("/api/accounts/:accountId/files/:fileId/exports", async (request, respo
       response.status(400).json({ error: "Choose a valid video quality." });
       return;
     }
-    runExportJob(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false, force: Boolean(request.body?.force) }).catch(() => {});
+    if (getFfmpegPath()) runExportJob(file.id, { qualities: [rendition.quality], includeAudio: false, includeThumbnail: false, force: Boolean(request.body?.force) }).catch(() => {});
+    else pingTranscoder({ fileId: file.id, qualities: [rendition.quality], includeAudio: false, force: Boolean(request.body?.force) });
     response.status(202).json({ ok: true, message: `${rendition.label} export started.` });
   } catch (error) {
     next(error);
@@ -3290,5 +3322,10 @@ if (require.main === module) {
       console.warn(`HTTPS server was not started: ${error.message}`);
     });
 }
+
+// Exposed for the transcoder container (transcoder/container-entry.js), which
+// reuses the exact same sweep/export pipeline with FFmpeg available.
+app.requeuePendingProxies = requeuePendingProxies;
+app.runExportJob = runExportJob;
 
 module.exports = app;
