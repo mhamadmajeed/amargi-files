@@ -42,6 +42,14 @@ export default {
     if (url.pathname === "/health") return new Response("ok");
     const auth = request.headers.get("authorization") || "";
     const authorized = env.TRIGGER_SECRET && auth === `Bearer ${env.TRIGGER_SECRET}`;
+    if (url.pathname === "/restart" && request.method === "POST") {
+      if (!authorized) return new Response("Unauthorized", { status: 401 });
+      const container = getContainer(env.TRANSCODER);
+      await container.destroy().catch(() => {});
+      return new Response(JSON.stringify({ ok: true, restarted: true }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
     if (url.pathname === "/debug" && request.method === "GET") {
       if (!authorized) return new Response("Unauthorized", { status: 401 });
       const container = getContainer(env.TRANSCODER);
