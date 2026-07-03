@@ -1930,6 +1930,8 @@ app.get("/api/config", (_request, response) => {
     redirectUri: "",
     tokenSource: hasR2Config() ? "r2" : null,
     storage: "cloudflare-r2",
+    transcoder: transcoderConfigured(),
+    build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "local",
   });
 });
 
