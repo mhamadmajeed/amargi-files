@@ -15,13 +15,24 @@ const http = require("http");
 const app = require("../server.js");
 
 const IDLE_EXIT_MS = 30 * 1000;
-let activeWork = Promise.resolve();
 let pendingRuns = 0;
 let idleTimer = null;
 let lastError = "";
 let completedRuns = 0;
 
-const BUILD_MARKER = "stderr-capture-v2";
+const BUILD_MARKER = "single-queue-v1";
+
+// media-db.json is one shared JSON object with plain read-modify-write and no
+// locking. Two exports running "in parallel" — even for two DIFFERENT files —
+// each hold their own snapshot of the whole DB and can silently clobber each
+// other's writes on save. The only safe design here is ONE job running at a
+// time, ever. A priority queue (array, not a promise chain) still lets a
+// user's own upload jump ahead of a not-yet-started bare sweep, without ever
+// running two jobs concurrently.
+const queue = [];
+const queuedFileIds = new Set();
+let queueRunning = false;
+let currentLabel = "";
 
 function diagnostics() {
   return {
@@ -30,6 +41,8 @@ function diagnostics() {
     ffmpegPath: process.env.FFMPEG_PATH || "",
     ffmpegExists: fs.existsSync(process.env.FFMPEG_PATH || "/usr/bin/ffmpeg"),
     pendingRuns,
+    queueDepth: queue.length,
+    currentLabel,
     completedRuns,
     lastError,
     uptimeSec: Math.round(process.uptime()),
@@ -46,32 +59,45 @@ function scheduleIdleExit() {
   }, IDLE_EXIT_MS);
 }
 
-function runTracked(label, work) {
-  pendingRuns += 1;
-  const done = () => {
-    pendingRuns -= 1;
-    completedRuns += 1;
-    console.log(`[container] done: ${label}`);
-    scheduleIdleExit();
-  };
-  console.log(`[container] start: ${label}`);
-  return work()
-    .catch((error) => {
+async function drainQueue() {
+  if (queueRunning) return;
+  queueRunning = true;
+  while (queue.length) {
+    const { label, work, fileId } = queue.shift();
+    if (fileId) queuedFileIds.delete(fileId);
+    currentLabel = label;
+    console.log(`[container] start: ${label}`);
+    try {
+      await work();
+      completedRuns += 1;
+      console.log(`[container] done: ${label}`);
+    } catch (error) {
       lastError = `${label}: ${error.message}`;
       console.error(`[container] ${label} failed:`, error.stack || error.message);
-    })
-    .finally(done);
+    }
+    pendingRuns = queue.length;
+  }
+  currentLabel = "";
+  queueRunning = false;
+  scheduleIdleExit();
 }
 
-// Sweeps run one at a time (a big backlog shouldn't overlap with itself).
+// Sweeps go to the back of the line.
 function enqueue(label, work) {
-  activeWork = activeWork.then(() => runTracked(label, work));
+  queue.push({ label, work });
+  pendingRuns = queue.length;
+  drainQueue();
 }
 
-// A specific file's job runs immediately, in parallel with any sweep, so a
-// user waiting on one upload is never stuck behind an unrelated backlog.
-function runNow(label, work) {
-  runTracked(label, work);
+// A specific file's job jumps to the FRONT of the line — but still runs one
+// at a time, never concurrently with whatever else is queued or running.
+// Deduped: a second request for a file already queued is a no-op.
+function runNow(label, work, fileId) {
+  if (fileId && queuedFileIds.has(fileId)) return;
+  if (fileId) queuedFileIds.add(fileId);
+  queue.unshift({ label, work, fileId });
+  pendingRuns = queue.length;
+  drainQueue();
 }
 
 function readBody(request) {
@@ -98,7 +124,7 @@ http.createServer(async (request, response) => {
       includeAudio: job.includeAudio !== false,
       includeThumbnail: true,
       force: Boolean(job.force),
-    }));
+    }), job.fileId);
   } else {
     enqueue("sweep", () => app.requeuePendingProxies());
   }
