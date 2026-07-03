@@ -32,6 +32,7 @@ const {
   UploadPartCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { NodeHttpHandler } = require("@smithy/node-http-handler");
 
 const app = express();
 const port = Number(process.env.PORT || 4174);
@@ -498,6 +499,12 @@ function getR2Client() {
     region: "auto",
     endpoint: config.endpoint,
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    // Without an explicit timeout, a stalled connection to R2 (upload, HEAD
+    // check, etc.) can hang forever with no error — exactly what silently
+    // wedged the transcoder's job queue. 2 minutes covers even large
+    // rendition uploads; anything slower than that should fail loudly.
+    requestHandler: new NodeHttpHandler({ requestTimeout: 120000, connectionTimeout: 15000 }),
+    maxAttempts: 2,
   });
   return r2ClientCache;
 }
