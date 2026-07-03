@@ -132,5 +132,10 @@ http.createServer(async (request, response) => {
   response.end(JSON.stringify({ ok: true, queued: pendingRuns }));
 }).listen(8080, () => {
   console.log("[container] transcoder listening on 8080");
-  enqueue("boot sweep", () => app.requeuePendingProxies());
+  // No automatic boot sweep: any request that has to cold-boot the
+  // container (an upload, a Prepare click) would otherwise queue behind a
+  // full backlog scan that already started running before the request even
+  // arrived — since a sweep isn't interruptible mid-file, that can block a
+  // user's own file for as long as the sweep's current large video takes.
+  // The cron (every 15 min, empty-body /trigger) is the sole sweep trigger.
 });
