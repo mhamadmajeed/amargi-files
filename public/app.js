@@ -3094,11 +3094,17 @@ async function loadWorkflow(asset) {
 async function saveWorkflow() {
   if (!state.selectedAsset) return;
   const assigneeEmails = Array.from(elements.assigneeSelect.selectedOptions).map((option) => option.value).filter(Boolean);
-  await api(`/api/files/${state.selectedAsset.id}/workflow`, {
+  const { data } = await api(`/api/files/${state.selectedAsset.id}/workflow`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ assigneeEmails, status: elements.statusSelect.value }),
   });
+  // Keep the browser's card pills in sync with the review panel change,
+  // otherwise the status looks unchanged after closing the review.
+  if (data) {
+    state.workflowByFileId[state.selectedAsset.id] = data;
+    refreshAssetStatusPills();
+  }
   updateWorkflowAppearance();
 }
 
