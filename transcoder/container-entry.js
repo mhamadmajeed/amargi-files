@@ -21,8 +21,11 @@ let idleTimer = null;
 let lastError = "";
 let completedRuns = 0;
 
+const BUILD_MARKER = "stderr-capture-v2";
+
 function diagnostics() {
   return {
+    buildMarker: BUILD_MARKER,
     envPresent: ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_ENDPOINT"].filter((k) => process.env[k]),
     ffmpegPath: process.env.FFMPEG_PATH || "",
     ffmpegExists: fs.existsSync(process.env.FFMPEG_PATH || "/usr/bin/ffmpeg"),
