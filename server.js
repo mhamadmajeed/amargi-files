@@ -868,12 +868,16 @@ function normalizeRetentionDays(value) {
 
 // Lower qualities compress harder (higher CRF + 96k audio) so 720/480 come out
 // meaningfully smaller than the 1080 preview, like Frame.io proxy ladders.
+// "ultrafast" roughly halves encode time vs "veryfast" for ~10% larger files —
+// a good trade for compressed browsing/download proxies on a small container.
 const VIDEO_RENDITIONS = [
-  { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23", preset: "veryfast" },
-  { quality: "720", label: "720p", maxWidth: 1280, crf: "28", preset: "veryfast", audioBitrate: "96k" },
-  { quality: "480", label: "480p", maxWidth: 854, crf: "31", preset: "veryfast", audioBitrate: "96k" },
+  { quality: "1080", label: "1080p", maxWidth: 1920, crf: "23", preset: "ultrafast" },
+  { quality: "720", label: "720p", maxWidth: 1280, crf: "28", preset: "ultrafast", audioBitrate: "96k" },
+  { quality: "480", label: "480p", maxWidth: 854, crf: "31", preset: "ultrafast", audioBitrate: "96k" },
 ];
-const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "1080,480").split(",").map((item) => item.trim()).filter(Boolean));
+// 1080p is the slowest rendition by far; keep it on-demand (Prepare button)
+// so a fresh upload's automatic work (mp3 + 480p) finishes 2-3x faster.
+const AUTO_VIDEO_RENDITION_QUALITIES = new Set((process.env.AUTO_VIDEO_RENDITIONS || "480").split(",").map((item) => item.trim()).filter(Boolean));
 
 // In-memory export queue — each fileId queued at most once per server session
 // Avoids infinite retry loops while still triggering generation when needed.
