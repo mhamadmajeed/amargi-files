@@ -1564,7 +1564,7 @@ function renderAssets() {
       <span class="assetSelectMark" aria-hidden="true"></span>
       <button class="assetOpen" type="button" title="${escapeHtml(asset.name)}" draggable="true">
         <div class="assetThumb assetThumb-${kind}">${thumb}${assetThumbBarMarkup(asset)}</div>
-        <div class="assetInfo"><strong>${escapeHtml(asset.name)}</strong><span>${escapeHtml(meta)}</span>${assetRetentionMarkup(asset)}</div>
+        <div class="assetInfo"><strong>${escapeHtml(asset.name)}</strong><span class="assetMetaLine" hidden>${escapeHtml(meta)}</span>${assetRetentionMarkup(asset)}</div>
         <span class="assetKindPill assetKindPill-${kind}">${escapeHtml(kind)}</span>
       </button>
       ${assetDetailsMarkup(asset, created)}

@@ -2541,7 +2541,7 @@ body {
 }
 
 .assetRetention.retentionDate {
-  color: #e9c04a;
+  color: #f0883e;
 }
 
 .assetRetention.retentionPermanent {
@@ -2569,16 +2569,16 @@ body {
   pointer-events: none;
 }
 
-.thumbRetention {
+.assetThumbBar span.thumbRetention {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #e9c04a;
+  color: #f0883e;
   font-size: 0.68rem;
   font-weight: 700;
 }
 
-.thumbRetention.permanent {
+.assetThumbBar span.thumbRetention.permanent {
   color: #9aa3b4;
 }
 
@@ -2592,7 +2592,7 @@ body {
   stroke-linejoin: round;
 }
 
-.thumbDuration {
+.assetThumbBar span.thumbDuration {
   color: #e8edf6;
   font-size: 0.68rem;
   font-weight: 650;
@@ -2681,6 +2681,7 @@ body {
   min-width: 0;
   color: #9aa3b4;
   font-size: 0.7rem;
+  flex: 0 0 auto;
 }
 
 .uploaderChip i {
@@ -2697,9 +2698,7 @@ body {
 }
 
 .uploaderChip em {
-  overflow: hidden;
   font-style: normal;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2816,8 +2815,8 @@ body {
 }
 
 .assetGrid.listView .assetDetails .uploaderChip {
-  width: 190px;
-  flex: none;
+  min-width: 190px;
+  flex: 0 0 auto;
 }
 
 .assetGrid.listView .assetDetails .assetComments {
@@ -9361,7 +9360,7 @@ body:not(.reviewMode) .assetGrid.listView .assetOpen,
 }
 
 .assetGrid.listView .assetDetails .uploaderChip {
-  flex: 0 1 190px;
+  flex: 0 0 auto;
   min-width: 70px;
 }
 
