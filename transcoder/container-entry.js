@@ -20,7 +20,7 @@ let idleTimer = null;
 let lastError = "";
 let completedRuns = 0;
 
-const BUILD_MARKER = "single-queue-v1";
+const BUILD_MARKER = "explicit-sweep-v1";
 
 // media-db.json is one shared JSON object with plain read-modify-write and no
 // locking. Two exports running "in parallel" — even for two DIFFERENT files —
@@ -125,9 +125,11 @@ http.createServer(async (request, response) => {
       includeThumbnail: true,
       force: Boolean(job.force),
     }), job.fileId);
-  } else {
+  } else if (job.sweep === true) {
     enqueue("sweep", () => app.requeuePendingProxies());
   }
+  // Any other request (no fileId, no explicit sweep flag — e.g. a platform
+  // health probe) is acknowledged as a harmless no-op, never launches work.
   response.statusCode = 202;
   response.end(JSON.stringify({ ok: true, queued: pendingRuns }));
 }).listen(8080, () => {

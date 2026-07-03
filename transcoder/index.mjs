@@ -76,6 +76,9 @@ export default {
   },
 
   async scheduled(_controller, env) {
-    await wakeContainer(env, {});
+    // Explicit marker required — any bodyless/unrecognized POST that reaches
+    // the container (a platform health probe, a stray request, anything)
+    // must never accidentally trigger a full backlog sweep.
+    await wakeContainer(env, { sweep: true });
   },
 };
