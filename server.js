@@ -1251,27 +1251,35 @@ async function generateVideoProxy(fileId, options = {}) {
     const ext = path.extname(file.name || ".mp4") || ".mp4";
     const localInput = path.join(tempDir, `source${ext}`);
     console.log(`[export] Downloading source to ${localInput} …`);
+    // A stuck network request (e.g. no container egress) must fail fast rather
+    // than hang forever, since exports run one-at-a-time per file and a hang
+    // here blocks every job queued behind it indefinitely.
+    const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
     await new Promise((resolve, reject) => {
       const https = require("https");
       const http = require("http");
       const protocol = inputUrl.startsWith("https") ? https : http;
-      protocol.get(inputUrl, (res) => {
+      const withTimeout = (request) => {
+        request.setTimeout(DOWNLOAD_TIMEOUT_MS, () => request.destroy(new Error("Source download timed out")));
+        return request;
+      };
+      withTimeout(protocol.get(inputUrl, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           // Follow one redirect
           const redirectProto = res.headers.location.startsWith("https") ? https : http;
-          redirectProto.get(res.headers.location, (res2) => {
+          withTimeout(redirectProto.get(res.headers.location, (res2) => {
             const dest = require("fs").createWriteStream(localInput);
             res2.pipe(dest);
             dest.on("finish", resolve);
             dest.on("error", reject);
-          }).on("error", reject);
+          })).on("error", reject);
         } else {
           const dest = require("fs").createWriteStream(localInput);
           res.pipe(dest);
           dest.on("finish", resolve);
           dest.on("error", reject);
         }
-      }).on("error", reject);
+      })).on("error", reject);
     });
     console.log(`[export] Source downloaded, starting transcoding …`);
 
@@ -2376,7 +2384,7 @@ app.post("/api/files/:fileId/multipart/complete", async (request, response, next
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "multipart" });
     if (isVideo(file)) {
       if (getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
-      else pingTranscoder();
+      else pingTranscoder({ fileId: file.id, qualities: ["1080", "480"], includeAudio: true });
     }
     response.json({ data: toApiFile(file, db) });
   } catch (error) {
@@ -2416,7 +2424,7 @@ app.post("/api/files/:fileId/complete", async (request, response, next) => {
     await recordActivity(request, "file.upload_completed", { type: "file", id: file.id, name: file.name, projectId: file.projectId, folderId: file.folderId }, { size: file.size, mimeType: file.mimeType, uploadType: "single" });
     if (isVideo(file)) {
       if (getFfmpegPath()) runExportJob(file.id, { qualities: ["1080", "480"], includeAudio: true }).catch(() => {});
-      else pingTranscoder();
+      else pingTranscoder({ fileId: file.id, qualities: ["1080", "480"], includeAudio: true });
     }
     response.json({ data: toApiFile(file, db) });
   } catch (error) {

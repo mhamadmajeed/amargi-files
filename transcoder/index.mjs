@@ -23,7 +23,9 @@ function r2EnvVars(env) {
 async function wakeContainer(env, body) {
   const container = getContainer(env.TRANSCODER);
   try {
-    await container.start({ envVars: r2EnvVars(env) });
+    // enableInternet is required for outbound network access (R2 API calls) —
+    // without it the container has no egress and every fetch hangs forever.
+    await container.start({ envVars: r2EnvVars(env), enableInternet: true });
   } catch {
     // Already running — fall through and hand it the job below.
   }
@@ -44,7 +46,9 @@ export default {
       if (!authorized) return new Response("Unauthorized", { status: 401 });
       const container = getContainer(env.TRANSCODER);
       try {
-        await container.start({ envVars: r2EnvVars(env) });
+        // enableInternet is required for outbound network access (R2 API calls) —
+    // without it the container has no egress and every fetch hangs forever.
+    await container.start({ envVars: r2EnvVars(env), enableInternet: true });
       } catch {}
       const res = await container.containerFetch(new Request("http://transcoder/health"));
       return new Response(await res.text(), { headers: { "content-type": "application/json" } });

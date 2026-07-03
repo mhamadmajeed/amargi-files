@@ -43,23 +43,32 @@ function scheduleIdleExit() {
   }, IDLE_EXIT_MS);
 }
 
-function enqueue(label, work) {
+function runTracked(label, work) {
   pendingRuns += 1;
-  activeWork = activeWork
-    .then(() => {
-      console.log(`[container] start: ${label}`);
-      return work();
-    })
+  const done = () => {
+    pendingRuns -= 1;
+    completedRuns += 1;
+    console.log(`[container] done: ${label}`);
+    scheduleIdleExit();
+  };
+  console.log(`[container] start: ${label}`);
+  return work()
     .catch((error) => {
       lastError = `${label}: ${error.message}`;
       console.error(`[container] ${label} failed:`, error.stack || error.message);
     })
-    .finally(() => {
-      pendingRuns -= 1;
-      completedRuns += 1;
-      console.log(`[container] done: ${label}`);
-      scheduleIdleExit();
-    });
+    .finally(done);
+}
+
+// Sweeps run one at a time (a big backlog shouldn't overlap with itself).
+function enqueue(label, work) {
+  activeWork = activeWork.then(() => runTracked(label, work));
+}
+
+// A specific file's job runs immediately, in parallel with any sweep, so a
+// user waiting on one upload is never stuck behind an unrelated backlog.
+function runNow(label, work) {
+  runTracked(label, work);
 }
 
 function readBody(request) {
@@ -81,7 +90,7 @@ http.createServer(async (request, response) => {
   }
   const job = request.method === "POST" ? await readBody(request) : {};
   if (job.fileId) {
-    enqueue(`export ${job.fileId}`, () => app.runExportJob(job.fileId, {
+    runNow(`export ${job.fileId}`, () => app.runExportJob(job.fileId, {
       qualities: Array.isArray(job.qualities) ? job.qualities : ["1080", "480"],
       includeAudio: job.includeAudio !== false,
       includeThumbnail: true,
