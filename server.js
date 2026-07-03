@@ -1297,6 +1297,8 @@ async function generateVideoProxy(fileId, options = {}) {
     const { longSide: sourceLongSide, duration: sourceDuration } = await probeVideoMeta(localInput);
     if (sourceLongSide > 0) file.sourceLongSide = sourceLongSide;
     if (sourceDuration > 0 && !file.duration) file.duration = Math.round(sourceDuration);
+    // Encode smallest-first so a usable download (480p) appears in minutes;
+    // the slow 1080p pass runs last instead of blocking everything.
     const effectiveQualities = qualities.filter((r) => {
       if (sourceLongSide > 0 && r.maxWidth > sourceLongSide) {
         console.log(`[export] Skipping ${r.label} — source long side ${sourceLongSide}px is below ${r.maxWidth}px`);
@@ -1304,7 +1306,7 @@ async function generateVideoProxy(fileId, options = {}) {
         return false;
       }
       return true;
-    });
+    }).sort((a, b) => a.maxWidth - b.maxWidth);
 
     const thumbPath = path.join(tempDir, "thumb.jpg");
     if (includeThumbnail && !file.thumbnailKey) {
@@ -1318,6 +1320,25 @@ async function generateVideoProxy(fileId, options = {}) {
     }
     file.renditions ||= {};
     const force = Boolean(options.force);
+    // MP3 first: it encodes in a fraction of the video time, so a download
+    // option shows up almost immediately after upload.
+    if (includeAudio) {
+      if (!force && file.audioKey && await objectExists(file.audioKey)) {
+        file.audioStatus = "ready";
+        file.exportJobs.mp3 = "ready";
+      } else {
+        const audioPath = path.join(tempDir, "audio.mp3");
+        await runFfmpeg(["-y", "-threads", "0", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "128k", "-q:a", "4", audioPath], "MP3 export");
+        await fs.access(audioPath);
+        const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
+        await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
+        file.audioKey = audioKey;
+        file.audioStatus = "ready";
+        file.exportJobs.mp3 = "ready";
+      }
+      file.updatedAt = new Date().toISOString();
+      await writeMediaDb(db);
+    }
     for (const rendition of effectiveQualities) {
       if (!force && file.renditions?.[rendition.quality]?.key && await objectExists(file.renditions[rendition.quality].key)) {
         file.exportJobs[rendition.quality] = "ready";
@@ -1369,21 +1390,6 @@ async function generateVideoProxy(fileId, options = {}) {
       file.exportJobs[rendition.quality] = "ready";
       file.updatedAt = new Date().toISOString();
       await writeMediaDb(db);
-    }
-    if (includeAudio) {
-      if (!force && file.audioKey && await objectExists(file.audioKey)) {
-        file.audioStatus = "ready";
-        file.exportJobs.mp3 = "ready";
-      } else {
-        const audioPath = path.join(tempDir, "audio.mp3");
-        await runFfmpeg(["-y", "-threads", "0", "-i", localInput, "-vn", "-codec:a", "libmp3lame", "-b:a", "128k", "-q:a", "4", audioPath], "MP3 export");
-        await fs.access(audioPath);
-        const audioKey = storageKey("projects", file.projectId, "files", file.id, "audio.mp3");
-        await uploadFileToR2(audioKey, audioPath, "audio/mpeg");
-        file.audioKey = audioKey;
-        file.audioStatus = "ready";
-        file.exportJobs.mp3 = "ready";
-      }
     }
     file.proxyStatus = file.proxyKey || file.thumbnailKey ? "ready" : "pending";
     file.proxyStartedAt = "";
