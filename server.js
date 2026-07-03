@@ -1217,7 +1217,12 @@ async function runFfmpeg(args, label) {
   if (!ffmpegPath) throw new Error("FFmpeg is not available. Set FFMPEG_PATH to generate video exports on this machine.");
   await new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, { windowsHide: true });
-    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`${label} failed with code ${code}`))));
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      if (stderr.length > 4000) stderr = stderr.slice(-4000); // keep the tail, where the real error usually is
+    });
+    child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`${label} failed with code ${code}: ${stderr.trim().split("\n").slice(-6).join(" | ")}`))));
     child.on("error", reject);
   });
 }
