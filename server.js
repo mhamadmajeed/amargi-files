@@ -947,8 +947,11 @@ function getFfmpegPath() {
   return ffmpegInstaller?.path || "";
 }
 
+// Transcoder config lives in the R2-backed app settings (with env fallback):
+// Vercel's env injection proved unreliable for late-added vars on this
+// legacy-builds project, and R2 settings work identically everywhere.
 function transcoderConfigured() {
-  return Boolean(process.env.TRANSCODER_TRIGGER_URL);
+  return Boolean(getSetting("TRANSCODER_TRIGGER_URL"));
 }
 
 // True when SOMETHING can generate exports: local ffmpeg or the remote worker.
@@ -961,11 +964,11 @@ function canPrepareExports() {
 // by its cron. Payload optionally names a specific export job.
 function pingTranscoder(job = null) {
   if (!transcoderConfigured() || getFfmpegPath()) return;
-  fetch(process.env.TRANSCODER_TRIGGER_URL, {
+  fetch(getSetting("TRANSCODER_TRIGGER_URL"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${process.env.TRANSCODER_TRIGGER_SECRET || ""}`,
+      authorization: `Bearer ${getSetting("TRANSCODER_TRIGGER_SECRET") || ""}`,
     },
     body: JSON.stringify(job || {}),
   }).catch((error) => console.warn("[transcoder] trigger failed:", error.message));
